@@ -5,10 +5,11 @@
 FROM python:3.12-slim-bookworm AS base
 WORKDIR /app
 
+# Poetry 2+ required: pyproject.toml uses [tool.poetry.requires-plugins] (invalid in Poetry 1.x).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl wkhtmltopdf \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir "poetry==1.8.4"
+    && pip install --no-cache-dir "poetry>=2.0.0"
 
 ENV POETRY_VIRTUALENVS_CREATE=false \
     POETRY_NO_INTERACTION=1 \
