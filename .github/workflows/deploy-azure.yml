@@ -1,0 +1,118 @@
+# Deploy fastapi_backend to Azure Container Apps (ACR push + revision update). NT
+# Canonical remote: https://github.com/JMSolorzano-13/fastapi_backend (repo root = fastapi_backend/).
+# Monorepo (local_siigo_fiscal): use root ``.github/workflows/fastapi-azure-acr.yml`` so deploy does not depend on ``backend/`` CI; branch protection should require that workflow + ``fastapi_backend/.github/workflows/tests.yml``.
+#
+# Secret: AZURE_CREDENTIALS — JSON from `az ad sp create-for-rbac --sdk-auth`.
+# Repository variables (Settings → Secrets and variables → Actions → Variables):
+#   AZURE_RESOURCE_GROUP — POC stack RG from terraform_azure_siigofiscal (e.g. rg-siigofiscal-dev)
+#   AZURE_ACR_NAME — registry short name only
+#   AZURE_CONTAINER_APP_NAME — FastAPI API Container App name
+#   AZURE_WORKER_CONTAINER_APP_NAME — optional; Python Service Bus worker image. If unset, worker image is still pushed but ACA is not updated.
+
+name: Deploy Azure (ACA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (empty = short SHA)"
+        required: false
+        default: ""
+      docker_target:
+        description: "Dockerfile target (prod | dev)"
+        required: false
+        default: "prod"
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: fastapi-backend
+  IMAGE_NAME_WORKER: fastapi-worker
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Azure login (service principal)
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Validate Actions variables (ACR / RG / Container App)
+        run: |
+          missing=""
+          [ -z "${{ vars.AZURE_ACR_NAME }}" ] && missing="${missing}AZURE_ACR_NAME "
+          [ -z "${{ vars.AZURE_RESOURCE_GROUP }}" ] && missing="${missing}AZURE_RESOURCE_GROUP "
+          [ -z "${{ vars.AZURE_CONTAINER_APP_NAME }}" ] && missing="${missing}AZURE_CONTAINER_APP_NAME "
+          if [ -n "$missing" ]; then
+            echo "::error::Missing GitHub Actions repository variables: $missing"
+            echo "::notice::Use terraform_azure_siigofiscal outputs (siigofiscal POC), not solucioncp Go stack names."
+            exit 1
+          fi
+
+      - name: Derive image tag
+        id: tag
+        run: |
+          IT="${{ github.event.inputs.image_tag }}"
+          if [ -n "$IT" ]; then
+            echo "value=$IT" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: ACR login
+        run: az acr login --name "${{ vars.AZURE_ACR_NAME }}"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: ${{ github.event.inputs.docker_target || 'prod' }}
+          push: true
+          tags: |
+            ${{ vars.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}
+            ${{ vars.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push worker image (prod-worker / dev-worker)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.docker_target == 'dev' && 'dev-worker' || 'prod-worker' }}
+          push: true
+          tags: |
+            ${{ vars.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_WORKER }}:${{ steps.tag.outputs.value }}
+            ${{ vars.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_WORKER }}:latest
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update API Container App
+        run: |
+          az containerapp update \
+            --name "${{ vars.AZURE_CONTAINER_APP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ vars.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.value }}" \
+            --output none
+
+      - name: Update Service Bus worker Container App
+        if: ${{ vars.AZURE_WORKER_CONTAINER_APP_NAME != '' }}
+        run: |
+          az containerapp update \
+            --name "${{ vars.AZURE_WORKER_CONTAINER_APP_NAME }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --image "${{ vars.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_WORKER }}:${{ steps.tag.outputs.value }}" \
+            --output none

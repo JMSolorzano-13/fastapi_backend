@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Póliza contable</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@100;300;400;500;600;700;800;900&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            -webkit-print-color-adjust: exact;
+        }
+
+        body {
+            font-family: 'Barlow', sans-serif;
+            font-weight: 300;
+            font-size: 10px;
+            line-height: 1.3;
+            color: #333;
+            box-sizing: border-box;
+        }
+
+        .container {
+            padding: 20px 30px;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #d0d0d0;
+        }
+
+        .page-header h1 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #000;
+            margin: 0;
+        }
+
+        .sistema-origen {
+            font-size: 9px;
+            color: #888;
+        }
+
+        .info-row {
+            margin-bottom: 15px;
+            font-size: 10px;
+            padding: 8px 0;
+        }
+
+        .info-item {
+            display: inline-block;
+            margin-right: 50px;
+            white-space: nowrap;
+        }
+
+        .info-label {
+            color: #666;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .info-value {
+            color: #009dff;
+            font-weight: 400;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            color: #000;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-size: 9px;
+        }
+
+        th {
+            background-color: #f5f5f5;
+            padding: 8px 6px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid #e5e5e5;
+            color: #666;
+            font-size: 9px;
+        }
+
+        td {
+            padding: 5px 4px;
+            border-bottom: 1px solid #f5f5f5;
+            color: #333;
+            vertical-align: top;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .total-row {
+            font-weight: 600;
+        }
+
+        .total-row td {
+            border-top: 1px solid #d0d0d0;
+            border-bottom: 1px solid #d0d0d0;
+            padding: 7px 4px;
+        }
+
+        .total-row .total-cell {
+            background-color: #f5f5f5;
+        }
+
+        @media print {
+            html {
+                color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Encabezado -->
+        <div class="page-header">
+            <h1>Póliza contable</h1>
+            <div class="sistema-origen">Sistema origen: {{ poliza.sistema_origen or "CONTPAQ i® Contabilidad" }}</div>
+        </div>
+
+        <!-- Información principal -->
+        <div class="info-row">
+            <div class="info-item">
+                <span class="info-label">Fecha:</span>
+                <span class="info-value">{{ poliza.fecha.strftime('%d/%m/%Y') if poliza.fecha else "" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Tipo:</span>
+                <span class="info-value">{{ poliza.tipo or "" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Número:</span>
+                <span class="info-value">{{ poliza.numero or "" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Concepto:</span>
+                <span class="info-value" style="color: #333;">{{ poliza.concepto or "" }}</span>
+            </div>
+        </div>
+
+        <!-- Movimientos -->
+        <div class="section-title">Movimientos</div>
+        <table>
+            <thead>
+                <tr>
+                    <th class="text-center" style="width: 5%;">#</th>
+                    <th style="width: 12%;">Cuenta contable</th>
+                    <th style="width: 20%;">Nombre</th>
+                    <th style="width: 15%;">Referencia</th>
+                    <th style="width: 18%;">Concepto</th>
+                    <th class="text-right" style="width: 15%;">Cargo</th>
+                    <th class="text-right" style="width: 15%;">Abono</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if movimientos %}
+                {% set total_cargo = 0 %}
+                {% set total_abono = 0 %}
+
+                {% for mov in movimientos %}
+                {% set total_cargo = total_cargo + (mov.cargo|float if mov.cargo else 0) %}
+                {% set total_abono = total_abono + (mov.abono|float if mov.abono else 0) %}
+
+                <tr>
+                    <td class="text-center">{{ mov.numerador or "" }}</td>
+                    <td>{{ mov.cuenta_contable or "" }}</td>
+                    <td>{{ mov.nombre or "" }}</td>
+                    <td>{{ mov.referencia or "" }}</td>
+                    <td>{{ mov.concepto or "" }}</td>
+                    <td class="text-right">{{ "${:,.2f}".format(mov.cargo|float) if mov.cargo else "" }}</td>
+                    <td class="text-right">{{ "${:,.2f}".format(mov.abono|float) if mov.abono else "" }}</td>
+                </tr>
+                {% endfor %}
+
+                <!-- Totales -->
+                <tr class="total-row">
+                    <td colspan="4" style="border: none;"></td>
+                    <td class="text-right total-cell">Sumas iguales:</td>
+                    <td class="text-right total-cell">${{ "{:,.2f}".format(total_cargo) }}</td>
+                    <td class="text-right total-cell">${{ "{:,.2f}".format(total_abono) }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; color: #999; padding: 20px;">No hay movimientos
+                        registrados</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        <!-- CFDIs relacionados -->
+        {% if cfdis_relacionados and cfdis_relacionados|length > 0 %}
+        <div class="section-title">CFDIs relacionados</div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 8%;">Tipo</th>
+                    <th style="width: 12%;">Fecha de expedición</th>
+                    <th class="text-center" style="width: 6%;">Serie</th>
+                    <th class="text-center" style="width: 6%;">Folio</th>
+                    <th style="width: 12%;">RFC emisor</th>
+                    <th style="width: 40%;">Emisor</th>
+                    <th class="text-right" style="width: 16%;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for relacion in poliza.relaciones %}
+                <tr>
+                    <td colspan="7" style="padding: 0; border-bottom: none;">
+                        <table style="width: 100%; margin: 0; border-collapse: collapse;">
+                            <tr style="border-bottom: 1px solid #f5f5f5;">
+                                <td style="width: 8%; padding: 5px 4px; border: none;">{{
+                                    relacion.cfdi_related.TipoDeComprobante if relacion.cfdi_related else "Ingreso" }}
+                                </td>
+                                <td style="width: 12%; padding: 5px 4px; border: none;">{{
+                                    relacion.cfdi_related.Fecha.strftime('%d/%m/%Y') if relacion.cfdi_related and
+                                    relacion.cfdi_related.Fecha else "" }}</td>
+                                <td style="width: 6%; padding: 5px 4px; text-align: center; border: none;">{{
+                                    relacion.cfdi_related.Serie if relacion.cfdi_related else "" }}</td>
+                                <td style="width: 6%; padding: 5px 4px; text-align: center; border: none;">{{
+                                    relacion.cfdi_related.Folio if relacion.cfdi_related else "" }}</td>
+                                <td style="width: 12%; padding: 5px 4px; border: none;">{{
+                                    relacion.cfdi_related.RfcEmisor if relacion.cfdi_related else "" }}</td>
+                                <td style="width: 40%; padding: 5px 4px; border: none;">{{
+                                    relacion.cfdi_related.NombreEmisor if relacion.cfdi_related else "" }}</td>
+                                <td style="width: 16%; padding: 5px 4px; text-align: right; border: none;">{{
+                                    "${:,.2f}".format(relacion.cfdi_related.Total|float) if relacion.cfdi_related and
+                                    relacion.cfdi_related.Total else "" }}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="7" style="padding: 3px 4px; font-size: 8px; color: #888; border: none;">{{
+                                    relacion.uuid_related }}</td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+</body>
+
+</html>

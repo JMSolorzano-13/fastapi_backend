@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CFDI</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@100;300;400;500;600;700;800;900&display=swap');
+
+        html {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            font-size: 20px;
+        }
+
+        body {
+            font-family: 'Barlow', sans-serif;
+            font-weight: 300;
+            box-sizing: border-box;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        th {
+            font-weight: 500;
+            padding: 2px 7px;
+        }
+
+        td {
+            padding: 2px 7px;
+        }
+
+        b {
+            font-weight: 500;
+        }
+
+        .rowContent {
+            min-width: 4px;
+        }
+
+        @media print {
+            html {
+                color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <table style="width: 100%">
+        <tr>
+
+            {% if not cfdi.Estatus %}
+            <td style="width: 75%;"> <span
+                    style="border: 1px solid rgb(145, 202, 255); color: rgb(9, 88, 217); padding: 3px 15px; background-color:rgb(230, 244, 255);line-height:none;">{{
+                    cfdi.c_tipo_de_comprobante.name }}</span> <span
+                    style="border: 1px solid rgb(255, 163, 158); color: rgb(207, 19, 34); padding: 3px 15px; background-color:rgb(255, 241, 240);line-height:none;">Cancelado
+                    {{ cfdi.FechaCancelacion.strftime('%d/%m/%Y') }}</span></td>
+            {% else %}
+            <td style="width: 75%;"> <span
+                    style="border: 1px solid rgb(145, 202, 255); color: rgb(9, 88, 217); padding: 3px 15px; background-color:rgb(230, 244, 255);line-height:none;">{{
+                    cfdi.c_tipo_de_comprobante.name }}</span> <span
+                    style="border: 1px solid rgb(183,245, 50); color: rgb(56, 158, 48); padding: 3px 15px; background-color:rgb(246, 255, 257);line-height:none;">Vigente</span>
+            </td>
+            {% endif %}
+            <td style="width: 25%;" align="left">
+                <p> Folio: {{ cfdi.Folio or "" }}</p>
+            </td>
+        </tr>
+    </table>
+    <br>
+    {# START emisor section #}
+    <table width="40%">
+        <tr>
+            <td colspan="1"> <b>Emisor</b> </td>
+            <td colspan="1"> <b>{{ cfdi.NombreEmisor or "" }}</b> </td>
+        </tr>
+    </table>
+    <table width="100%">
+        <tr style="vertical-align: top;">
+            <td colspan="2" width="35%"> RFC: <b>{{ cfdi.RfcEmisor or "" }}</b></td>
+            <td colspan="2" width="35%"> Lugar de Emisión: <b>{{ cfdi.LugarExpedicion or "" }}</b></td>
+            <td colspan="2" width="30%"><b>Folio Fiscal: </b></td>
+        </tr>
+        <tr style="vertical-align: top;">
+            <td colspan="2" width="35%"> Registro patronal: <b>{{ cfdi.nomina.EmisorRegistroPatronal or "" }}</b></td>
+            <td colspan="2" width="35%"> Fecha de emisión: <b>{{ cfdi.Fecha or " "}}</b></td>
+            <td colspan="2" width="30%" style="font-size: 18px">{{ cfdi.UUID or "" }}</td>
+        </tr>
+        <tr>
+            <td colspan="1">
+                <b>Régimen fiscal: </b>
+                {{ cfdi.RegimenFiscalEmisor if cfdi.RegimenFiscalEmisor else "" }}
+                {% if cfdi.RegimenFiscalEmisor or cfdi.c_regimen_fiscal_emisor and cfdi.c_regimen_fiscal_emisor.name %}
+                - {% endif %}
+                {{ cfdi.c_regimen_fiscal_emisor.name if cfdi.c_regimen_fiscal_emisor and
+                cfdi.c_regimen_fiscal_emisor.name else "" }}
+            </td>
+        </tr>
+    </table>
+    {# END emisor section #}
+    <br> <br>
+    {# START receptor section #}
+    <table width="40%">
+        <tr>
+            <td colspan="1"> <b>Receptor</b> </td>
+            <td colspan="1"> <b>{{ cfdi.NombreReceptor or "" }}</b> </td>
+        </tr>
+    </table>
+    <table width="100%">
+        <tr style="vertical-align: top;">
+            <td colspan="2" width="35%"> RFC: <b>{{cfdi.RfcReceptor or ""}}</b></td>
+            <td colspan="2" width="35%"> Ingreso: <b>{{ cfdi.nomina.ReceptorFechaInicioRelLaboral or "" }}</b></td>
+            <td colspan="2" width="30%"> Departamento: <b>{{ cfdi.nomina.ReceptorDepartamento or "" }}</b></td>
+        </tr>
+        <tr style="vertical-align: top;">
+            <td colspan="2" width="35%"> CURP: <b>{{ cfdi.nomina.ReceptorCurp or "" }}</b></td>
+            <td colspan="2" width="35%"> Antigüedad: <b>{{ cfdi.nomina.ReceptorAntigüedad or "" }}</b></td>
+            <td colspan="2" width="30%"> Puesto: <b>{{ cfdi.nomina.ReceptorPuesto or "" }}</b></td>
+        </tr>
+        <tr style="vertical-align: top;">
+            <td colspan="2" width="35%"> Núm. seguro social: <b>{{ cfdi.nomina.ReceptorNumSeguridadSocial or "" }}</b>
+            </td>
+            <td colspan="2" width="35%"> Núm. de empleado: <b>{{ cfdi.nomina.ReceptorNumEmpleado or "" }}</b></td>
+            {% if not cfdi.nomina.ReceptorSalarioBaseCotApor %}
+            <td>Salario base cotización:</td>
+            {% else %}
+            <td colspan=“2” width=“30%“> Salario base cotización: <b>{{
+                    "${:,.2f}".format(cfdi.nomina.ReceptorSalarioBaseCotApor|float)}}</b></td>
+            {% endif%}
+
+            {# <td colspan=“2” width=“30%“> Salario base cotización: <b>{{
+                    "${:,.2f}".format(cfdi.nomina.ReceptorSalarioBaseCotApor) if cfdi.nomina.ReceptorSalarioBaseCotApor
+                    }}</b>
+            </td> #}
+
+        </tr>
+        <tr style="vertical-align: top;">
+            <td colspan="2" width="25"> Domicilio fiscal: <b>{{ cfdi.DomicilioFiscalReceptor or "" }}</b></td>
+            <td colspan="2" width="35%"> Tipo de régimen: <b>{{ cfdi.nomina.ReceptorTipoRegimen or "" }}</b></td>
+            <td colspan="2" width="30%"> Salario diario integrado: <b>{{
+                    "${:,.2f}".format(cfdi.nomina.ReceptorSalarioDiarioIntegrado|float) or "" }}</b>
+            </td>
+        </tr>
+    </table>
+    {# END receptor section #}
+    <br> <br>
+    {# START payment section #}
+    <table>
+        <tr>
+            <td>
+                Periodo de pago
+            </td>
+        </tr>
+    </table>
+    <table width="100%">
+        <tr>
+            <td colspan="2" width="35%"> Fecha de pago: <b>{{ cfdi.nomina.FechaPago or "" }}</b></td>
+            <td colspan="2" width="35%"> Fecha inicial: <b>{{ cfdi.nomina.FechaInicialPago or "" }}</b></td>
+            <td colspan="2" width="30%"> Días pagados: <b>{{ cfdi.nomina.NumDiasPagados or "" }}</b></td>
+        </tr>
+        <tr>
+            <td colspan="2" width="35%"> Tipo de nómina: <b>{{ cfdi.nomina.TipoNomina or "" }}</b></td>
+            <td colspan="2" width="35%"> Fecha final: <b>{{ cfdi.nomina.FechaFinalPago or "" }}</b></td>
+        </tr>
+    </table>
+    {# END payment section #}
+    <br><br>
+
+    {# START payroll details section #}
+    <section style="padding: 10px; font-size: 18px">
+        <table width="100%">
+            <tr style="font-size: 20px">
+                <th align="left" width="50%"
+                    style="border-bottom: 1px solid #c2c2c2; padding-bottom: 10px; padding-left: 5px">
+                    Percepciones y
+                    otros pagos</th>
+                <th align="left" style="border-bottom: 1px solid #c2c2c2; padding-bottom: 10px; padding-left: 5px">
+                    Deducciones </th>
+            </tr>
+            <tr style="border-left: 1px solid #c2c2c2; border-right: 1px solid #c2c2c2; vertical-align: top">
+                <td style="border-right: 1px solid #c2c2c2">
+                    {# PERCEPTS and OTHER PAYMENTS section #}
+                    <Table width="99%">
+                        <div style="margin-bottom: 15px;"></div>
+                        {% for percepcion in cfdi.nomina.Percepciones %}
+                        {% for percept in percepcion.get("Percepcion") %}
+                        <tr style="vertical-align: top;">
+                            <td width="10%" style="padding-left: 15px"> {{ percept["@Clave"] }}
+                            </td>
+                            <td width="80%"> {{ percept["@Concepto"] }} </td>
+
+                            <td width="10%" align="right"> {{ "${:,.2f}".format(percept.get("@ImporteExento", 0)|float +
+                                percept.get("@ImporteGravado")|float) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {# <tr>
+                            <td colspan="3" style="padding-left: 70px; font-size: 14.5px">
+                                <b>Gravado: </b> {{
+                                "${:,.2f}".format(percepcion.ImporteGravado) or
+                                "${:,.2f}".format(0) }} -
+                                <b>Exento: </b> {{
+                                "${:,.2f}".format(percepcion.ImporteExento) or
+                                "${:,.2f}".format(0) }}
+                            </td>
+                        </tr> #}
+                        <tr>
+                            <td>
+                                <div class="rowContent"></div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% for otroPago in cfdi.nomina.OtrosPagos %}
+                        {% for otherPayment in otroPago.get("OtroPago") %}
+                        <tr style="vertical-align: top;">
+                            <td width="10%" style="padding-left: 15px"> {{ otherPayment["@Clave"] }} </td>
+                            <td width="80%"> {{ otherPayment["@Concepto"] }} </td>
+                            <td width="10%" align="right"> {{ "${:,.2f}".format(otherPayment.get("@Importe", 0)|float)
+                                }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr>
+                            <td>
+                                <div class="rowContent"></div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </Table>
+                </td>
+                <td>
+                    <Table width="99%">
+                        <div style="margin-bottom: 15px;"></div>
+                        {# DEDUCTIONS section #}
+                        {% for deduccion in cfdi.nomina.Deducciones %}
+                        {% for deduction in deduccion.get("Deduccion") %}
+                        <tr style="vertical-align: top">
+                            <td width="10%" style="padding-left: 15px"> {{ deduction["@Clave"] }} </td>
+                            <td width="80%"> {{ deduction["@Concepto"] }} </td>
+                            <td width="10%" align="right"> {{ "${:,.2f}".format(deduction.get("@Importe", 0)|float) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        <tr>
+                            <td>
+                                <div class="rowContent"></div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </Table>
+                </td>
+            </tr>
+            <!-- This code is for white space between data and totals -->
+            <tr style="border-left: 1px solid #c2c2c2; border-right: 1px solid #c2c2c2">
+                <td style="border-right: 1px solid #c2c2c2">
+                    {#Blank space condition#}
+                    {% if cfdi.nomina.Deducciones|length <= 10 %} <br><br><br><br>
+                        {% else %}
+                        <br><br>
+                        {% endif %}
+                </td>
+                <td style="border-right: 1px solid #c2c2c2"></td>
+            </tr>
+            <!-- This code is for white space between data and totals -->
+            <tr
+                style="border-left: 1px solid #c2c2c2; border-right: 1px solid #c2c2c2; border-bottom: 1px solid #c2c2c2">
+                <td style="border-right: 1px solid #c2c2c2">
+                    <Table width="100%">
+                        <tr style="font-weight: 500">
+                            <td width="10%" style="padding-left: 20px"></td>
+                            <td align="right" width="70%"> Total de Percepciones y otros
+                                pagos </td>
+                            <td align="right" width="20%">{{ "${:,.2f}".format(cfdi.nomina.TotalPercepciones|float or 0
+                                +
+                                cfdi.nomina.TotalOtrosPagos|float or 0) }}</td>
+                        </tr>
+                    </Table>
+                    <div style="margin-bottom: 15px;"></div>
+                </td>
+                <td>
+                    <Table width="100%">
+                        <tr style="font-weight: 500">
+                            <td width="58%" style="padding-left: 20px"></td>
+                            <td align="left" width="70%"> Total de deducciones </td>
+                            <td align="right" width="20%">{{ "${:,.2f}".format(cfdi.nomina.TotalDeducciones|float) }}
+                            </td>
+                        </tr>
+                    </Table>
+                    <div style="margin-bottom: 15px;"></div>
+                </td>
+            </tr>
+            <tr>
+                <td width="50%"></td>
+                <td>
+                    <div style="margin-bottom: 10px;"></div>
+                    <Table width="100%">
+                        <tr style="font-weight: 500">
+                            <td width="60%" style="padding-left: 20px;"></td>
+                            <td align=" left" width="70%"> Neto a pagar </td>
+                            <td align="right" width="20%"> {{ "${:,.2f}".format(cfdi.nomina.NetoAPagar|float) }} </td>
+                        </tr>
+                    </Table>
+                </td>
+            </tr>
+        </table>
+    </section>
+    {# END payroll details section #}
+
+    <br><br>
+
+    <table style="color:#555; font-size: .70rem; width: 1160px;">
+        <tr>
+            <td style="padding: 0;">
+                {% if cfdi.UUID and cfdi.RfcEmisor and cfdi.RfcReceptor and cfdi.Total and cfdi.Sello %}
+                <table>
+                    <tr>
+                        <td><img src="{{ qrcode("
+                                https://verificacfdi.facturaelectronica.sat.gob.mx/default.aspx?id=" + cfdi.UUID + "
+                                &re=" + cfdi.RfcEmisor + " &rr=" + cfdi.RfcReceptor + " &tt=" + cfdi.Total|string + "
+                                &fe=" + cfdi.Sello[-8:], box_size=" 4") }}"></td>
+                    </tr>
+                </table>
+                {% endif %}
+            </td>
+            <td style="vertical-align: top; padding: 0;">
+                <table style="table-layout: fixed; width: 950px">
+                    {# <tr align="left">
+                        <th>Cadena Original del complemento de Certificación Digital del SAT</th>
+                    </tr>
+                    <tr style="overflow-wrap: break-word">
+                        <td>{{ "||" + cfdi.VersionTFD + "|" + cfdi.UUID + "|" + cfdi.RfcPac + "|" + cfdi.Sello + "|" +
+                            cfdi.NoCertificadoSAT + "||" }}</td>
+                    </tr> #}
+                    <tr align="left">
+                        <th>Sello digital del CFDI</th>
+                    </tr>
+                    <tr>
+                        <td style="word-wrap: break-word">{{ cfdi.Sello or ""}}</td>
+                    </tr>
+                    <tr align="left">
+                        <th>Sello del SAT</th>
+                    </tr>
+                    <tr>
+                        <td style="word-wrap: break-word">{{ cfdi.SelloSAT or "" }}</td>
+                    </tr>
+                    <!-- <tr align="left">
+                        <th>Cadena Original de Complemento de Certificación Digital del SAT</th>
+                    </tr>
+                    <tr>
+                        <td style="word-wrap: break-word">{{ cfdi.CadenaOriginal or "" }}</td>
+                    </tr> -->
+                </table>
+            </td>
+        </tr>
+    </table>
+    <p style="text-align: center; line-height: 1; font-size: 14px">Este documento es una representación impresa de un
+        CFDI</p>
+    <table width="100%" style="font-size: 14px">
+        <tr align="center">
+            <td>{{ cfdi.MetodoPago or "" }} {{ " - " + cfdi.c_metodo_pago.name if cfdi.c_metodo_pago else "" }}</td>
+            <td>Versión del comprobante: {{ cfdi.Version }}</td>
+            <td>Versión del complemento: {{ cfdi.nomina.Version }}</td>
+            <td>Uso del CFDI: {{ cfdi.UsoCFDIReceptor or "" }} {{ " - " + cfdi.c_uso_cfdi_receptor.name if
+                cfdi.c_uso_cfdi_receptor else "" }}</td>
+        </tr>
+    </table>
+    {% if display_logo %}
+    <table width="95%" style="margin-top: 50px; opacity: 0.5;">
+        <tr>
+            <td align="right" style="margin-top: 50px;">
+                <img src="https://solucioncp-frontend-prod.s3.amazonaws.com/logoez.svg" width=150 height=68.5
+                    alt="logoez" />
+            </td>
+            <td>
+                <a style="margin-top: -200px;" href="https://ezaudita.com/?utm_source=pdf_ri&utm_medium=pdf_ri"
+                    rel="noreferrer noopener" target="_blank">ezaudita.com</a>
+            </td>
+        </tr>
+    </table>
+    {% endif %}
+</body>
+
+</html>

@@ -1,0 +1,3 @@
+<des:PeticionDescargaMasivaTercerosEntrada>
+    <des:peticionDescarga IdPaquete="{package_id}" RfcSolicitante="{rfc}">{signature}</des:peticionDescarga>
+</des:PeticionDescargaMasivaTercerosEntrada>

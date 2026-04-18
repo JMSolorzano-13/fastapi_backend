@@ -1,0 +1,135 @@
+{% extends 'templates/base.html.jinja' %}
+<style>
+    * {
+        background-color: aqua;
+    }
+</style>
+{% block title %}
+PPD notifications
+{% endblock %}
+
+{% block body %}
+<table style="padding-top: 30px; padding-left: 30px; padding-right: 30px;" width="600" cellpadding="0" cellspacing="0">
+    <tr>
+        <td>
+            <h2 style="line-height: normal; font-size: 18px; margin: 0;">¡Hola, {{ user }}!</h2>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <p style="font-size: 16px; line-height: 24px; letter-spacing: 0;"> Queremos que realizar tus conciliaciones
+                sea más sencillo. Consulta algunos
+                <strong>indicadores clave para
+                    dar seguimiento a tus CFDIs de ingresos PPD</strong> y sus saldos.
+            </p>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <p style="font-size: 16px; margin-top: 0; line-height: 24px;">¡No pierdas de vista los comprobantes de
+                pago faltantes!</p>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <table style="border: 1px solid rgb(207, 216, 220); border-radius: 4px; width: 100%;">
+                <tr>
+                    <th colspan="3"
+                        style="padding: 15px; font-size: 14px; line-height: 22px; font-weight: 700; text-align: left; border-bottom: 1px solid rgb(207, 216, 220)">
+                        Facturas PPD
+                        {{ data_cfdi["date"] }}</th>
+                </tr>
+                <tr>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; padding-left: 15px; width: 170px;">
+                        &nbsp;
+                    </td>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; width: 170px; text-align: center;">
+                        CFDIs</td>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; padding-right: 15px; width: 170px; text-align: right;">
+                        Total</td>
+                </tr>
+                {# Vigentes #}
+                <tr>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; padding-left: 15px; width: 170px;">
+                        Vigentes:</td>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; width: 170px; text-align: center;">
+                        {{data_cfdi["vigentes qty"]}}</td>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; padding-right: 15px; width: 170px; text-align: right;">
+                        ${{ "{:,.2f}".format(data_cfdi["vigentes"])}}</td>
+                </tr>
+                {# Totalmente pagadas #}
+                <tr>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; padding-left: 15px; width: 170px;">
+                        Totalmente
+                        pagadas:</td>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; width: 170px; text-align: center;">
+                        {{data_cfdi["Totalmente pagadas qty"]}}</td>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; padding-right: 15px; width: 170px; text-align: right;">
+                        ${{ "{:,.2f}".format(data_cfdi["Totalmente pagadas"]) }}</td>
+                </tr>
+                {# Pendiente de pago #}
+                <tr>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; padding-left: 15px; width: 170px;">
+                        Pendiente de
+                        pago:</td>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; width: 170px; text-align: center;">
+                        {{data_cfdi["Pendiente de pago qty"]}}</td>
+                    <td
+                        style="font-size: 14px; line-height: 22px; padding-top: 5px; padding-bottom: 5px; padding-right: 15px; width: 170px; text-align: right;">
+                        ${{ "{:,.2f}".format(data_cfdi["Pendiente de pago"])}}</td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr>
+        <td style="padding-top: 20px; text-align: left;">
+            Información obtenida con corte al {{ send_date }}
+        </td>
+    </tr>
+    <tr>
+        <td style="padding-top: 26px; text-align: center;">
+            <a style="width: 271px; height: 100%; background-color: rgb(0, 157, 255); padding: 11px 15px 12px 15px; font-size: 18px; font-weight: 700; color: rgb(255,255,255); border-radius: 6px; cursor:pointer; text-decoration: none;"
+                href={{ main_button_url }}>
+                Consulta resumen completo
+            </a>
+        </td>
+    </tr>
+    <tr>
+    <td style="padding-top: 15px;">
+        <p style="font-size: 16px; font-weight: 400; line-height: 24px;">
+            ¡Comienza a explorar las funcionalidades de Siigo Fiscal!
+    </td>
+</tr>
+<tr>
+    <td>
+        <a style="color: rgb(0, 157, 255); font-size: 16px; font-weight: 700; cursor:pointer; text-decoration: none;"
+            href="https://siigocontadorportaldeclientes.aspel.com.mx/inicia-en-siigo-fiscal/">
+            <span>•</span> Ver tutoriales
+        </a>
+    </td>
+</tr>
+    <tr>
+        <td style="padding-top: 5px;">
+            <p style="font-size: 16px; font-weight: 400; line-height: 24px;">
+                ¿Tienes dudas sobre Siigo Fiscal? ¡Contacta a tu distribuidor, aliado de negocio, o llámanos al +52 55
+                1840 1065!</p>
+        </td>
+    </tr>
+    <tr>
+        <td style="padding-top: 15px; font-weight: 400; line-height: 22px; font-size: 14px;">
+            Equipo Siigo Fiscal
+        </td>
+    </tr>
+</table>
+{% endblock %}

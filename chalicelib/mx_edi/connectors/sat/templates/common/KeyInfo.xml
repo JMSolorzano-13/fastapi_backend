@@ -1,0 +1,9 @@
+<KeyInfo>
+    <X509Data>
+        <X509IssuerSerial>
+            <X509IssuerName>{issuer_name}</X509IssuerName>
+            <X509SerialNumber>{serial_number}</X509SerialNumber>
+        </X509IssuerSerial>
+        <X509Certificate>{certificate}</X509Certificate>
+    </X509Data>
+</KeyInfo>

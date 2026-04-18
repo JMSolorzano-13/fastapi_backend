@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xmlns:pago20="http://www.sat.gob.mx/Pagos20" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd http://www.sat.gob.mx/Pagos20 http://www.sat.gob.mx/sitio_internet/cfd/Pagos/Pagos20.xsd http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/timbre/TimbreFiscalDigitalv11.xsd" Version="4.0" Fecha="2024-04-06T10:00:00" NoCertificado="00001000000504465028" Certificado="MIIC...FAKE...CERT" SubTotal="0.00" Moneda="XXX" Total="0.00" TipoDeComprobante="P" Exportacion="01" LugarExpedicion="64000">
+  <cfdi:Emisor Rfc="AAA010101AAA" Nombre="Proveedor Demo SA de CV" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="BBB010101BBB" Nombre="Empresa Cliente SA de CV" DomicilioFiscalReceptor="64000" RegimenFiscalReceptor="601" UsoCFDI="CP01"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="ACT" Descripcion="Pago" ValorUnitario="0.00" Importe="0.00" ObjetoImp="01"/>
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <pago20:Pagos Version="2.0">
+      <pago20:Totales MontoTotalPagos="100.00" TotalTrasladosImpuestoIVA16="16.00" TotalTrasladosBaseIVA16="100.00" />
+      <pago20:Pago FechaPago="2024-04-06T10:00:00" MonedaP="MXN" Monto="100.00" FormaDePagoP="03">
+        <pago20:DoctoRelacionado IdDocumento="11111111-1111-4111-8111-111111111111" MonedaDR="MXN" EquivalenciaDR="1" NumParcialidad="1" ImpSaldoAnt="100.00" ImpPagado="100.00" ImpSaldoInsoluto="0.00" ObjetoImpDR="02">
+          <pago20:ImpuestosDR>
+            <pago20:TrasladosDR>
+              <pago20:TrasladoDR BaseDR="100.00" ImpuestoDR="002" TipoFactorDR="Tasa" TasaOCuotaDR="0.160000" ImporteDR="16.00"/>
+            </pago20:TrasladosDR>
+          </pago20:ImpuestosDR>
+        </pago20:DoctoRelacionado>
+      </pago20:Pago>
+    </pago20:Pagos>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="44444444-4444-4444-8444-444444444444" FechaTimbrado="2024-04-06T10:05:00" RfcProvCertif="TUMG620310R95" NoCertificadoSAT="00001000000504465028" SelloSAT="SELLOSATFAKE"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>

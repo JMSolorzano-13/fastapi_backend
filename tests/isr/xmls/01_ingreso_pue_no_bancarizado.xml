@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/timbre/TimbreFiscalDigitalv11.xsd" Version="4.0" Fecha="2024-02-15T12:00:00" NoCertificado="00001000000504465028" Certificado="MIIC...FAKE...CERT" SubTotal="100.00" Moneda="MXN" Total="116.00" TipoDeComprobante="I" Exportacion="01" MetodoPago="PUE" FormaPago="01" LugarExpedicion="64000">
+  <cfdi:Emisor Rfc="AAA010101AAA" Nombre="Proveedor Demo SA de CV" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="BBB010101BBB" Nombre="Empresa Cliente SA de CV" DomicilioFiscalReceptor="64000" RegimenFiscalReceptor="601" UsoCFDI="S01"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111500" Cantidad="1" ClaveUnidad="ACT" Descripcion="Servicio demo" ValorUnitario="100.00" Importe="100.00">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="100.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="16.00"/>
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="16.00">
+    <cfdi:Traslados>
+      <cfdi:Traslado Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="16.00"/>
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="11111111-1111-4111-8111-111111111111" FechaTimbrado="2024-02-15T12:05:00" RfcProvCertif="TUMG620310R95" NoCertificadoSAT="00001000000504465028" SelloSAT="SELLOSATFAKE"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>

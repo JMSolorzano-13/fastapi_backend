@@ -1,0 +1,3 @@
+<des:VerificaSolicitudDescarga xmlns:des="http://DescargaMasivaTerceros.sat.gob.mx">
+    <des:solicitud IdSolicitud="{identifier}" RfcSolicitante="{rfc}">{signature}</des:solicitud>
+</des:VerificaSolicitudDescarga>

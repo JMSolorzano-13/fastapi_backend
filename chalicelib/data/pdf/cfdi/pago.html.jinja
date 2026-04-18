@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CFDI</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@100;300;400;500;600;700;800;900&display=swap');
+
+        html {
+            -webkit-print-color-adjust: exact;
+            font-size: 21px;
+        }
+
+        body {
+            font-family: 'Barlow', sans-serif;
+            font-weight: 300;
+            box-sizing: border-box;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        th {
+            font-weight: 500;
+            padding: 2px 7px;
+        }
+
+        td {
+            padding: 2px 7px;
+        }
+
+        b {
+            font-weight: 500;
+        }
+
+        @media print {
+            html {
+                color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <table style="width: 100%">
+        <tr>
+            {% if not cfdi.Estatus %}
+            <td style="width: 50%;"> <span
+                    style="border: 1px solid rgb(145, 202, 255); color: rgb(9, 88, 217); padding: 3px 15px; background-color:rgb(230, 244, 255);line-height:none;">{{
+                    cfdi.c_tipo_de_comprobante.name }}</span> <span
+                    style="border: 1px solid rgb(255, 163, 158); color: rgb(207, 19, 34); padding: 3px 15px; background-color:rgb(255, 241, 240);line-height:none;">Cancelado
+                    {{ cfdi.FechaCancelacion.strftime('%d/%m/%Y') }}</span></td>
+            {% else %}
+            <td style="width: 50%;"> <span
+                    style="border: 1px solid rgb(145, 202, 255); color: rgb(9, 88, 217); padding: 3px 15px; background-color:rgb(230, 244, 255);line-height:none;">{{
+                    cfdi.c_tipo_de_comprobante.name }}</span> <span
+                    style="border: 1px solid rgb(183,245, 143); color: rgb(56, 158, 13); padding: 3px 15px; background-color:rgb(246, 255, 257);line-height:none;">Vigente</span>
+            </td>
+            {% endif %}
+            <td style="widht: 25%;" align="center">
+                <p> <b>Folio:</b> {{ cfdi.Folio or "" }}</p>
+            </td>
+        </tr>
+    </table>
+    <br>
+    <table>
+        <tr>
+            <td>
+                <table style="width: 400px">
+                    <tr align="left">
+                        <td style="font-weight: 500">Emisor: <br /> {{ cfdi.NombreEmisor or "" }} <br /> {{
+                            cfdi.RfcEmisor or "" }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Lugar de Expedición: </b> {{ cfdi.LugarExpedicion or "" }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Régimen Fiscal: </b> {{ cfdi.RegimenFiscalEmisor or "" }} {{ " - " +
+                            cfdi.c_regimen_fiscal_emisor.name if cfdi.c_regimen_fiscal_emisor else "" }}</td>
+                    </tr>
+                </table>
+            </td>
+            <td style="vertical-align: top">
+                <table style="width: 325px">
+                    <tr align="left">
+                        <td style="font-weight: 500">Receptor: <br /> {{ cfdi.NombreReceptor or "" }} <br /> {{
+                            cfdi.RfcReceptor or "" }}</td>
+                    </tr>
+                    {% if not cfdi.is_issued %}
+                    <tr>
+                        <td><b>Régimen Fiscal: </b> {{ cfdi.RegimenFiscalReceptor or "" }} {{ " - " +
+                            cfdi.c_regimen_fiscal_receptor.name if cfdi.c_regimen_fiscal_receptor else "" }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </td>
+        </tr>
+    </table>
+    <br>
+    <table width="100%">
+        <tr align="left">
+            <th>Folio Fiscal:</th>
+            <th>Fecha / Hora de Emisión:</th>
+            <th>No. de Certificado Digital:</th>
+        </tr>
+        <tr>
+            <td>{{ cfdi.UUID or "" }}</td>
+            <td>{{ cfdi.Fecha or "" }}</td>
+            <td>{{ cfdi.NoCertificado or "" }}</td>
+        </tr>
+    </table>
+    <div style="background-color: rgb(240, 240, 240);border-radius: 5px;">
+        <table width="100%" style="margin-top:10px;">
+            <tr align="left">
+                <th>Fecha: </th>
+                <th>Número de operación: </th>
+                <th>Nombre Banco Ordenante: </th>
+            </tr>
+            <tr>
+                <td>{{ cfdi.payments[0].FechaPago or "" }}</td>
+                <td>{{ cfdi.payments[0].NumOperacion or "" }}</td>
+                <td>{{ cfdi.payments[0].NomBancoOrdExt or "" }}</td>
+            </tr>
+        </table>
+        <table width="100%" style="margin-top:10px;">
+            <tr align="left">
+                <th>RFC Emisor Cuenta Ordenante: </th>
+                <th>Cuenta Ordenante: </th>
+                <th>RFC Emisor Cuenta Beneficiario: </th>
+                <th>Cuenta Beneficiario</th>
+            </tr>
+            <tr>
+                <td>{{ cfdi.payments[0].RfcEmisorCtaOrd or "" }}</td>
+                <td>{{ cfdi.payments[0].CtaOrdenante or "" }}</td>
+                <td>{{ cfdi.payments[0].RfcEmisorCtaBen or "" }}</td>
+                <td>{{ cfdi.payments[0].CtaBeneficiario or "" }}</td>
+            </tr>
+        </table>
+    </div>
+    <p><b>Documento relacionado</b></p>
+    <table width="100%">
+        <tr align="left">
+            <th style="border-bottom: 1px solid #ddd;">UUID</th>
+            <th style="border-bottom: 1px solid #ddd;">Folio</th>
+            <th style="border-bottom: 1px solid #ddd;">Moneda</th>
+            <th style="border-bottom: 1px solid #ddd;">Método de pago</th>
+            <th style="border-bottom: 1px solid #ddd;">Parcialidad</th>
+            <th style="border-bottom: 1px solid #ddd;">Saldo anterior</th>
+            <th style="border-bottom: 1px solid #ddd;">Pagado</th>
+            <th style="border-bottom: 1px solid #ddd;">Saldo insoluto</th>
+        </tr>
+        {% if cfdi.payments %}
+        {% for payment in cfdi.payments %}
+        {% for document in payment.docto_relacionados %}
+        <tr>
+            <td>{{ document.UUID_related or "" }}</td>
+            <td>{{ document.Folio or "" }}</td>
+            <td>{{ document.MonedaDR or "" }}</td>
+            <td>{{ document.MetodoDePagoDR or "" }}</td>
+            <td>{{ document.NumParcialidad or "" }}</td>
+            <td align="right">{{ "${:,.2f}".format(document.ImpSaldoAnt) or 0 }}</td>
+            <td align="right">{{ "${:,.2f}".format(document.ImpPagado) or 0 }}</td>
+            <td align="right">{{ "${:,.2f}".format(document.ImpSaldoInsoluto) or 0 }}</td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+        {% endif %}
+        <tr>
+            <td style="border-bottom: 1px solid #ddd; border-top: 1px solid #ddd"><b>Moneda: </b> {{
+                cfdi.payments[0].MonedaP or "" }}</td>
+            <td colspan="2" style="border-bottom: 1px solid #ddd; border-top: 1px solid #ddd"><b>Forma de pago: </b> {{
+                cfdi.payments[0].c_forma_pago.name or "" }}</td>
+            <td colspan="2" style="border-bottom: 1px solid #ddd; border-top: 1px solid #ddd"><b>Tipo de cambio: </b> {{
+                cfdi.payments[0].TipoCambioP or "" }}.00</td>
+            <td colspan="1" style="border-bottom: 1px solid #ddd; border-top: 1px solid #ddd"></td>
+            <td
+                style="text-align: right; border-bottom: 1px solid #ddd; border-top: 1px solid #ddd; font-weight: 500; box-sizing: border-box; font-size:1.2rem">
+                Monto: </td>
+            <td align="right"
+                style="border-bottom: 1px solid #ddd; border-top: 1px solid #ddd; font-weight: 500; font-size:1.2rem">{{
+                "${:,.2f}".format(cfdi.payments[0].Monto) if cfdi.payments[0].Monto else "" }}</td>
+        </tr>
+    </table>
+    <br>
+    <table width="400px">
+        <tr align="left" style="vertical-align: top;">
+            <th>Uso del CFDI:</th>
+        </tr>
+        <tr style="vertical-align: top;">
+            <td>{{ cfdi.UsoCFDIReceptor or "" }} {{ " - " + cfdi.c_uso_cfdi_receptor.name if cfdi.c_uso_cfdi_receptor
+                else "" }}</td>
+        </tr>
+    </table>
+    <br>
+
+    <table style="color:#555; font-size: .70rem; width: 1160px;">
+        <tr>
+            <td style="padding: 0;">
+                {% if cfdi.UUID and cfdi.RfcEmisor and cfdi.RfcReceptor and cfdi.Total and cfdi.Sello %}
+                <table>
+                    <tr>
+                        <td><img src="{{ qrcode("
+                                https://verificacfdi.facturaelectronica.sat.gob.mx/default.aspx?id=" + cfdi.UUID + "
+                                &re=" + cfdi.RfcEmisor + " &rr=" + cfdi.RfcReceptor + " &tt=" + cfdi.Total|string + "
+                                &fe=" + cfdi.Sello[-8:], box_size=" 4") }}"></td>
+                    </tr>
+                </table>
+                {% endif %}
+            </td>
+            <td style="vertical-align: top; padding: 0;">
+                <table style="table-layout: fixed; width: 950px">
+                    {# <tr align="left">
+                        <th>Cadena Original del complemento de Certificación Digital del SAT</th>
+                    </tr>
+                    <tr style="overflow-wrap: break-word">
+                        <td>{{ "||" + cfdi.VersionTFD + "|" + cfdi.UUID + "|" + cfdi.RfcPac + "|" + cfdi.Sello + "|" +
+                            cfdi.NoCertificadoSAT + "||" }}</td>
+                    </tr> #}
+                    <tr align="left">
+                        <th>Sello Digital del CFDI</th>
+                    </tr>
+                    <tr>
+                        <td style="word-wrap: break-word">{{ cfdi.Sello or ""}}</td>
+                    </tr>
+                    <tr align="left">
+                        <th>Sello Digital del SAT</th>
+                    </tr>
+                    <tr>
+                        <td style="word-wrap: break-word">{{ cfdi.SelloSAT or "" }}</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+    <br>
+    <table style="font-size: .8rem;" width="75%">
+        <tr>
+            <th align="left">Fecha/Hora de Certificación:</th>
+            <th align="left">Número de Serie Certificado del SAT:</th>
+            <th align="left">RFC del PAC</th>
+        </tr>
+        <tr>
+            <td>{{ cfdi.FechaCertificacionSat or "" }}</td>
+            <td>{{ cfdi.NoCertificadoSAT or "" }}</td>
+            <td>{{ cfdi.RfcPac or ""}}</td>
+        </tr>
+    </table>
+    <br>
+    <p style="text-align: center;">Este documento es una representación impresa de un CFDI</p>
+    {% if display_logo %}
+    <table width="95%" style="margin-top: 400px; opacity: 0.5;">
+        <tr>
+            <td align="right">
+                <img src="https://solucioncp-frontend-prod.s3.amazonaws.com/logoez.svg" width=150 height=67.5
+                    alt="logoez" />
+            </td>
+            <td>
+                <a style="margin-top: -200px;" href="https://app.ezaudita.com" rel="noreferrer noopener"
+                    target="_blank">ezaudita.com</a>
+            </td>
+        </tr>
+    </table>
+    {% endif %}
+</body>
+
+</html>

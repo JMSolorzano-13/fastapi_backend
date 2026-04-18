@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CFDI</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@100;300;400;500;600;700;800;900&display=swap');
+
+        html {
+            -webkit-print-color-adjust: exact;
+            font-size: 21px;
+        }
+
+        body {
+            font-family: 'Barlow', sans-serif;
+            font-weight: 300;
+            box-sizing: border-box;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        th {
+            font-weight: 500;
+            padding: 2px 7px;
+        }
+
+        td {
+            padding: 2px 7px;
+        }
+
+        b {
+            font-weight: 500;
+        }
+
+        @media print {
+            html {
+                color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <table style="width: 100%">
+        <tr>
+            {% if not cfdi.Estatus %}
+            <td style="width: 40%;"> <span
+                    style="border: 1px solid rgb(145, 202, 255); color: rgb(9, 88, 217); padding: 3px 15px; background-color:rgb(230, 244, 255);line-height:none;">{{
+                    cfdi.c_tipo_de_comprobante.name }}</span> <span
+                    style="border: 1px solid rgb(255, 163, 158); color: rgb(207, 19, 34); padding: 3px 15px; background-color:rgb(255, 241, 240);line-height:none;">Cancelado
+                    {{ cfdi.FechaCancelacion.strftime('%d/%m/%Y') }}</span></td>
+            {% else %}
+            <td style="width: 40%;"> <span
+                    style="border: 1px solid rgb(145, 202, 255); color: rgb(9, 88, 217); padding: 3px 15px; background-color:rgb(230, 244, 255);line-height:none;">{{
+                    cfdi.c_tipo_de_comprobante.name }}</span> <span
+                    style="border: 1px solid rgb(183,245, 143); color: rgb(56, 158, 13); padding: 3px 15px; background-color:rgb(246, 255, 257);line-height:none;">Vigente</span>
+            </td>
+            {% endif %}
+            <td style="width: 30%;">
+                <p>Serie: {{ cfdi.Serie or "" }}</p>
+            </td>
+            <td style="widht: 30%;" align="center">
+                <p> Folio: {{ cfdi.Folio or "" }}</p>
+            </td>
+        </tr>
+    </table>
+    <br>
+    <table>
+        <tr>
+            <td>
+                <table style="width: 400px">
+                    <tr align="left">
+                        <td style="font-weight: 500">Emisor: <br /> {{ cfdi.NombreEmisor or "" }} <br /> {{
+                            cfdi.RfcEmisor or "" }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Lugar de Expedición: </b> {{ cfdi.LugarExpedicion or "" }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Régimen Fiscal: </b> {{ cfdi.RegimenFiscalEmisor or "" }} {{ " - " +
+                            cfdi.c_regimen_fiscal_emisor.name if cfdi.c_regimen_fiscal_emisor else "" }}</td>
+                    </tr>
+
+                </table>
+            </td>
+            <td style="vertical-align: top">
+                <table style="width: 325px">
+                    <tr align="left">
+                        <td style="font-weight: 500">Receptor: <br /> {{ cfdi.NombreReceptor or "" }} <br /> {{
+                            cfdi.RfcReceptor or "" }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Domicilio fiscal: </b> {{ cfdi.DomicilioFiscalReceptor or "" }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Régimen fiscal: </b> {{ cfdi.RegimenFiscalReceptor or "" }} {{ " - " +
+                            cfdi.c_regimen_fiscal_receptor.name if cfdi.c_regimen_fiscal_receptor else "" }}</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+    <br>
+    <table width="100%">
+        <tr align="left">
+            <th>Folio Fiscal:</th>
+            <th>Fecha / Hora de Emisión:</th>
+            <th>No. de Certificado Digital:</th>
+        </tr>
+        <tr>
+            <td>{{ cfdi.UUID or "" }}</td>
+            <td>{{ cfdi.Fecha or "" }}</td>
+            <td>{{ cfdi.NoCertificado or "" }}</td>
+        </tr>
+    </table>
+    <br>
+    <table width="100%">
+        <tr align="left">
+            <th style="border-bottom: 1px solid #ddd; width: 50px;">Clave Producto</th>
+            <th style="border-bottom: 1px solid #ddd; width: 50px;">Cantidad</th>
+            <th style="border-bottom: 1px solid #ddd; width: 50px;">Clave Unidad</th>
+            <th style="border-bottom: 1px solid #ddd;">Concepto(s)</th>
+            <th style="border-bottom: 1px solid #ddd; width: 85px;">Precio Unitario</th>
+            <th style="border-bottom: 1px solid #ddd; width: 100px;">Importe</th>
+        </tr>
+        {% if conceptos %}
+        {% for concepto in conceptos %}
+        <tr>
+            <td>{{ concepto.get("@ClaveProdServ") or "" }}</td>
+            <td>{{ concepto.get("@Cantidad") or "" }}</td>
+            <td>{{ (concepto.get("@ClaveUnidad") or "") }}{% if concepto.get("@Unidad") %} - {{ concepto.get("@Unidad")
+                }}{% endif %}</td>
+            <td>{{ concepto.get("@Descripcion") or "" }}</td>
+            <td align="right">{{ "${:,.2f}".format(concepto.get("@ValorUnitario")|float) or 0 }}</td>
+            <td align="right">{{ "${:,.2f}".format(concepto.get("@Importe")|float) or 0}}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td colspan="3"></td>
+            <td style="padding: 10px 7px 0 7px">
+                <table style="width: 100%; marging-left: -10px; font-size:.90rem;">
+
+                    {% if concepto.get('Impuestos') and concepto['Impuestos']['Traslados'] %}
+                    <tr align="left">
+                        <th style="padding: 0;">Traslados:</th>
+                    </tr>
+                    {% if concepto['Impuestos']['Traslados']['Traslado'] is not mapping %}
+                    {% for traslado in concepto['Impuestos']['Traslados']['Traslado'] %}
+                    <tr>
+                        <td style="padding: 3px 0 3px 10px;"> Impuesto: {{ traslado.get("@Impuesto") or "" }}, Base: {{
+                            "${:,.2f}".format(traslado.get("@Base")|float) or "" }}, Tasa: {{
+                            traslado.get("@TasaOCuota") or "" }}{{ ", Importe: " }}{{
+                            "${:,.2f}".format(traslado.get("@Importe")|float) or "" }} </td>
+                    </tr>
+                    {% endfor %}
+                    {% else %}
+                    <tr>
+                        <td style="padding: 3px 0 3px 10px;"> Impuesto: {{
+                            concepto['Impuestos']['Traslados']['Traslado'].get('@Impuesto') or "" }}, Base: {{
+                            "${:,.2f}".format(concepto['Impuestos']['Traslados']['Traslado'].get("@Base")|float) or ""
+                            }}, Tasa: {{ concepto['Impuestos']['Traslados']['Traslado'].get("@TasaOCuota") or "" }}{{ ",
+                            Importe: " }}{{
+                            "${:,.2f}".format(concepto['Impuestos']['Traslados']['Traslado'].get("@Importe")|float) or
+                            "" }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if concepto.get('Impuestos') and concepto['Impuestos']['Retenciones'] %}
+                    <tr align="left">
+                        <th style="padding: 0;"> Retenciones:</th>
+                    </tr>
+                    {%if concepto['Impuestos']['Retenciones']['Retencion'] is not mapping %}
+                    {% for retencion in concepto['Impuestos']['Retenciones']['Retencion'] %}
+                    <tr>
+                        <td style="padding: 3px 0 3px 10px;"> Impuesto: {{ retencion.get("@Impuesto") or ""}}, Base: {{
+                            "${:,.2f}".format(retencion.get("@Base")|float) or "" }}, Tasa: {{
+                            retencion.get("@TasaOCuota") or ""}}{{ ", Importe: " }}{{
+                            "${:,.2f}".format(retencion.get("@Importe")|float) or "" }} </td>
+                    </tr>
+                    {% endfor %}
+                    {% else %}
+                    <tr>
+                        <td style="padding: 3px 0 3px 10px;"> Impuesto: {{
+                            concepto['Impuestos']['Retenciones']['Retencion'].get("@Impuesto") or ""}}, Base: {{
+                            "${:,.2f}".format(concepto['Impuestos']['Retenciones']['Retencion'].get("@Base")|float) or
+                            "" }}, Tasa: {{ concepto['Impuestos']['Retenciones']['Retencion'].get("@TasaOCuota") or
+                            ""}}{{ ", Importe: " }}{{
+                            "${:,.2f}".format(concepto['Impuestos']['Retenciones']['Retencion'].get("@Importe")|float)
+                            or "" }} </td>
+                    </tr>
+                    {% endif %}
+                    {% endif %}
+                    {% if cfdi.CuentaPredial %}
+                    <tr align="left">
+                        <td style="padding: 2px 0;">
+                            <b>Cuenta predial:</b> {{ cfdi.CuentaPredial|join(", ") }}
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </td>
+            <td colspan="2"></td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+        {% if cfdi.SubTotal %}
+        <tr>
+            <td colspan="4"> </td>
+            <td style="text-align: right; font-weight: 500; border-bottom: 1px solid #ddd;padding: 0;">Subtotal: </td>
+            <td style="text-align: right; border-bottom: 1px solid #ddd;">{{ "${:,.2f}".format(cfdi.SubTotal) }}</td>
+        </tr>
+        {% else %}
+        {% endif %}
+        {% if cfdi.Descuento and cfdi.Descuento > 0 %}
+        <tr>
+            <td colspan="4"> </td>
+            <td style="text-align: right; font-weight: 500; border-bottom: 1px solid #ddd;padding: 0;">Descuento: </td>
+            <td style="text-align: right; border-bottom: 1px solid #ddd;">{{ "${:,.2f}".format(cfdi.Descuento) }}</td>
+        </tr>
+        {% endif %}
+        {% if cfdi.TrasladosIEPS and cfdi.TrasladosIEPS > 0 %}
+        <tr>
+            <td colspan="4"></td>
+            <td style="text-align: right; font-weight: 500; border-bottom: 1px solid #ddd;padding: 0;">Traslado IEPS:
+            </td>
+            <td style="text-align: right; border-bottom: 1px solid #ddd;">{{ "${:,.2f}".format(cfdi.TrasladosIEPS) }}
+            </td>
+        </tr>
+        {% endif %}
+        {% if cfdi.TrasladosISR and cfdi.TrasladosISR > 0 %}
+        <tr>
+            <td colspan="4"></td>
+            <td style="text-align: right; font-weight: 500; border-bottom: 1px solid #ddd;padding: 0;">Traslado ISR:
+            </td>
+            <td style="text-align: right; border-bottom: 1px solid #ddd;">{{ "${:,.2f}".format(cfdi.TrasladosISR) }}
+            </td>
+        </tr>
+        {% endif %}
+        {% if cfdi.TrasladosIVA and cfdi.TrasladosIVA > 0 %}
+        <tr>
+            <td colspan="4"></td>
+            <td style="text-align: right; font-weight: 500; border-bottom: 1px solid #ddd;padding: 0;">Traslado IVA:
+            </td>
+            <td style="text-align: right; border-bottom: 1px solid #ddd;">{{ "${:,.2f}".format(cfdi.TrasladosIVA) }}
+            </td>
+        </tr>
+        {% endif %}
+        {% if cfdi.RetencionesIEPS and cfdi.RetencionesIEPS > 0 %}
+        <tr>
+            <td colspan="4"></td>
+            <td style="text-align: right; font-weight: 500; border-bottom: 1px solid #ddd;padding: 0;">Retención IEPS:
+            </td>
+            <td style="text-align: right; border-bottom: 1px solid #ddd;">{{ "${:,.2f}".format(cfdi.RetencionesIEPS) }}
+            </td>
+        </tr>
+        {% endif %}
+        {% if cfdi.RetencionesISR and cfdi.RetencionesISR > 0 %}
+        <tr>
+            <td colspan="4"></td>
+            <td style="text-align: right; font-weight: 500; border-bottom: 1px solid #ddd;padding: 0;">Retención ISR:
+            </td>
+            <td style="text-align: right; border-bottom: 1px solid #ddd;">{{ "${:,.2f}".format(cfdi.RetencionesISR) }}
+            </td>
+        </tr>
+        {% endif %}
+        {% if cfdi.RetencionesIVA and cfdi.RetencionesIVA > 0 %}
+        <tr>
+            <td colspan="4"></td>
+            <td style="text-align: right; font-weight: 500; border-bottom: 1px solid #ddd;padding: 0;">Retención IVA:
+            </td>
+            <td style="text-align: right; border-bottom: 1px solid #ddd;">{{ "${:,.2f}".format(cfdi.RetencionesIVA) }}
+            </td>
+        </tr>
+        {% endif %}
+        <tr>
+            <td colspan="3" style="border-bottom: 1px solid #ddd; min-width: 500px">Moneda: {{ cfdi.Moneda or "" }} {{ "
+                - " +
+                cfdi.c_moneda.name if
+                cfdi.c_moneda else "" }}</td>
+            {% if cfdi.Moneda and cfdi.TipoCambio and cfdi.Moneda != "MXN" and cfdi.Moneda != "Peso Mexicano" and
+            cfdi.Moneda != "Pesos" %}
+            <td style="text-align: right; border-bottom: 1px solid #ddd;"> {{ "Tipo de cambio:
+                ${:,.2f}".format(cfdi.TipoCambio) }} </td>
+            {% else %}
+            <td style="text-align: right; border-bottom: 1px solid #ddd;"></td>
+            {% endif %}
+            <td
+                style="color: white; background-color: rgb(39,78,117); text-align: right; border-bottom: 1px solid #ddd; font-weight: 500; box-sizing: border-box; font-size:1.2rem">
+                Total: </td>
+            <td align="right"
+                style="color: white; background-color: rgb(39,78,117); border-bottom: 1px solid #ddd; font-weight: 500; font-size:1.2rem">
+                {{ "${:,.2f}".format(cfdi.Total) if cfdi.Total else "" }}</td>
+        </tr>
+    </table>
+    <br>
+    <table width="700px">
+        <tr align="left" style="vertical-align: top;">
+            <th>Forma de Pago:</th>
+            <th width="240px">Método de Pago:</th>
+            <th>Uso del CFDI:</th>
+        </tr>
+        <tr style="vertical-align: top;">
+            <td style="vertical-align: top;">{{ cfdi.FormaPago or "" }} {{ " - " + cfdi.c_forma_pago.name if
+                cfdi.c_forma_pago else "" }}</td>
+            <td>{{ cfdi.MetodoPago or "" }} {{ " - " + cfdi.c_metodo_pago.name if cfdi.c_metodo_pago else "" }}</td>
+            <td>{{ cfdi.UsoCFDIReceptor or "" }} {{ " - " + cfdi.c_uso_cfdi_receptor.name if cfdi.c_uso_cfdi_receptor
+                else "" }}</td>
+        </tr>
+    </table>
+
+    {% if cfdi.TipoDeComprobante == "E" %}
+    <h3>CFDIs de ingreso relacionados</h3>
+
+    {% if cfdi.cfdi_origin and cfdi.cfdi_origin|length > 0 %}
+    {% set cfdis_list = [] %}
+    {% for cfdi in cfdi.cfdi_origin %}
+    {% if cfdi.cfdi_related.TipoDeComprobante == "I" and cfdi.cfdi_related.Estatus %}
+    {{ cfdis_list.append(cfdi)|default("", True) }}
+    {% endif%}
+    {% endfor %}
+
+    {% if cfdis_list|length > 0 %}
+    <table width="100%">
+        <tr style="background-color:#f2f2f2">
+            <th align="left" width="50%">UUID</th>
+            <th align="left">Tipo de relación</th>
+        </tr>
+        {% for cfdi in cfdi.cfdi_origin %}
+        <tr>
+            <td>{{ cfdi.uuid_related }}</td>
+            <td>{{ cfdi.TipoRelacion }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>Ningún ingreso relacionado</p>
+    {% endif %}
+    {% else %}
+    <p>Ningún ingreso relacionado</p>
+    {% endif %}
+    {% endif %}
+
+    <br>
+    <br>
+
+    <table style="color:#555; font-size: .70rem; width: 1160px;">
+        <tr>
+            <td style="padding: 0;">
+                {% if cfdi.UUID and cfdi.RfcEmisor and cfdi.RfcReceptor and cfdi.Total and cfdi.Sello %}
+                <table>
+                    <tr>
+                        <td><img src="{{ qrcode("
+                                https://verificacfdi.facturaelectronica.sat.gob.mx/default.aspx?id=" + cfdi.UUID + "
+                                &re=" + cfdi.RfcEmisor + " &rr=" + cfdi.RfcReceptor + " &tt=" + cfdi.Total|string + "
+                                &fe=" + cfdi.Sello[-8:], box_size=" 4") }}"></td>
+                    </tr>
+                </table>
+                {% endif %}
+            </td>
+            <td style="vertical-align: top; padding: 0;">
+                <table style="table-layout: fixed; width: 950px">
+                    {# <tr align="left">
+                        <th>Cadena Original del complemento de Certificación Digital del SAT</th>
+                    </tr>
+                    <tr style="overflow-wrap: break-word">
+                        <td>{{ "||" + cfdi.VersionTFD + "|" + cfdi.UUID + "|" + cfdi.RfcPac + "|" + cfdi.Sello + "|" +
+                            cfdi.NoCertificadoSAT + "||" }}</td>
+                    </tr> #}
+                    <tr align="left">
+                        <th>Sello Digital del CFDI</th>
+                    </tr>
+                    <tr>
+                        <td style="word-wrap: break-word">{{ cfdi.Sello or ""}}</td>
+                    </tr>
+                    <tr align="left">
+                        <th>Sello Digital del SAT</th>
+                    </tr>
+                    <tr>
+                        <td style="word-wrap: break-word">{{ cfdi.SelloSAT or "" }}</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+    <br>
+    <table style="font-size: .8rem;" width="75%">
+        <tr>
+            <th align="left">Fecha/Hora de Certificación:</th>
+            <th align="left">Número de Serie Certificado del SAT:</th>
+            <th align="left">RFC del PAC</th>
+        </tr>
+        <tr>
+            <td>{{ cfdi.FechaCertificacionSat or "" }}</td>
+            <td>{{ cfdi.NoCertificadoSAT or "" }}</td>
+            <td>{{ cfdi.RfcPac or ""}}</td>
+        </tr>
+    </table>
+    <br>
+    <p style="text-align: center;">Este documento es una representación impresa de un CFDI</p>
+    {% if display_logo %}
+    <table width="95%" style="margin-top: 400px; opacity: 0.5;">
+        <tr>
+            <td align="right" style="margin-top: 50px;">
+                <img src="https://solucioncp-frontend-prod.s3.amazonaws.com/logoez.svg" width=150 height=68.5
+                    alt="logoez" />
+            </td>
+            <td>
+                <a style="margin-top: -200px;" href="https://app.ezaudita.com" rel="noreferrer noopener"
+                    target="_blank">ezaudita.com</a>
+            </td>
+        </tr>
+    </table>
+    {% endif %}
+</body>
+
+</html>

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CFDIs con errores</title>
+  <!--[if mso]>
+      <noscript>
+        <xml>
+          <o:OfficeDocumentSettings>
+            <o:PixelsPerInch>96</o:PixelsPerInch>
+          </o:OfficeDocumentSettings>
+        </xml>
+      </noscript>
+    <![endif]-->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Nunito+Sans&display=swap');
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Nunito Sans', Arial, sans-serif;
+    }
+
+    #mail-table-container {
+      width: 600px;
+      border-collapse: collapse;
+      border: 0;
+      border-spacing: 0;
+      background: #ffffff;
+      border: 1px solid #dddddd;
+    }
+  </style>
+</head>
+
+<body>
+  {% set logo_url = VITE_APP_LOGO_URL %}
+  {% set support_url = "https://www.siigo.com/mx/soporte/#soporte" if is_siigo else
+  "soporte@ezaudita.com" %}
+
+
+  <table role="presentation" id="mail-table-container" width="600">
+    {% include 'templates/header.html.jinja' %}
+    <main>
+      {% block body %}
+      <!-- contenido por defecto -->
+      {% endblock %}
+    </main>
+    {% include 'templates/footer.html.jinja' %}
+  </table>
+</body>
+
+</html>

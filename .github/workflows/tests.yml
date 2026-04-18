@@ -1,0 +1,80 @@
+name: Tests
+
+on:
+  push:
+
+concurrency:
+  group: fastapi-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: runner-siigo
+
+    env:
+      PYTHONPATH: .
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: backend
+          POSTGRES_PASSWORD: backend
+          POSTGRES_DB: ezaudita_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Configure Poetry (in-project venv)
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry --version
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: ./.venv
+          key: venv-fastapi-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-root --with dev
+
+      - name: Load environment variables from .env.github
+        run: |
+          if [ -f .env.github ]; then
+            while IFS= read -r line; do
+              [[ -z "$line" || "$line" =~ ^# ]] && continue
+              echo "$line" >> "$GITHUB_ENV"
+            done < .env.github
+          fi
+
+      - name: Run Alembic migrations (main)
+        env:
+          PGPASSWORD: backend
+        run: |
+          poetry run alembic -c chalicelib/alembic.ini upgrade head
+
+      - name: Run tests
+        env:
+          PGPASSWORD: backend
+        run: |
+          poetry run pytest tests -n 0

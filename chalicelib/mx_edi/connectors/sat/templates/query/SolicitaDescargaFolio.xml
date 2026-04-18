@@ -1,0 +1,3 @@
+<des:SolicitaDescargaFolio>
+  <des:solicitud Folio="{folio}" {rfc_solicitante}>{signature}</des:solicitud>
+</des:SolicitaDescargaFolio>

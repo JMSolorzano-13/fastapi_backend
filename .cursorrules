@@ -1,0 +1,1030 @@
+# FastAPI Backend — Siigo Fiscal Cursor Rules
+
+## Project Context
+
+**What This Is**: API Gateway & Business Logic Core for Siigo Fiscal (Mexican fiscal compliance SaaS). Migrated from AWS Chalice to FastAPI while preserving backward compatibility with frontend and existing patterns.
+
+**Critical Constraint**: All responses must maintain Chalice-shaped error format `{"Code": "ErrorClass", "Message": "detail"}` for frontend compatibility.
+
+---
+
+## Tech Stack
+
+### Core
+- **Framework**: FastAPI (migrated from Chalice)
+- **Python**: 3.12 (strict)
+- **Dependency Management**: Poetry (pyproject.toml)
+- **ASGI Server**: Uvicorn (with `standard` extras for production)
+- **Validation**: Pydantic v2
+
+### Database & ORM
+- **Primary DB**: Aurora PostgreSQL (RDS) via SQLAlchemy 1.x
+- **Tenant Isolation**: Multi-tenant architecture with per-company schemas
+- **Connection Pooling**: `NullPool` (Lambda-optimized)
+- **Session Management**: Read-only (`get_db_session`) vs Read-write (`get_db_session_rw`) chains
+- **Migration Tool**: Alembic (tenant + control schemas)
+
+### Infrastructure & Communication
+- **Event Bus**: Custom in-memory event bus (`chalicelib.new.shared.domain.event.event_bus.EventBus`)
+- **Async Processing**: AWS SQS (25+ queues for domain events)
+- **Storage**: S3 (certs, exports, attachments, XMLs, metadata)
+- **Auth**: AWS Cognito User Pool + external B2C (Siigo SSO via OIDC)
+- **Payments**: Stripe 11.6
+- **CRM**: Odoo via OdooRPC 0.10.1
+
+### Testing & Quality
+- **Test Framework**: pytest with xdist (parallel), pytest-cov, pytest-asyncio
+- **Linter**: Ruff (line-length=100, target-version=py312)
+- **Type Checking**: mypy (python_version=3.12, strict excludes for legacy code)
+- **Mocking**: moto (AWS services), pytest-mock
+
+---
+
+## Architecture Patterns
+
+### 1. Dependency Injection (FastAPI Style)
+
+**Replace Chalice's parameter-name DI with explicit `Depends()`:**
+
+```python
+# ✅ CORRECT — FastAPI explicit DI
+from dependencies import get_db_session, get_current_user, get_company_session
+
+@router.post("/search")
+def search(
+    json_body: dict = Depends(get_json_body),
+    company_session: Session = Depends(get_company_session),
+):
+    return CFDIController.search(...)
+
+# ❌ WRONG — Chalice implicit injection (no longer works)
+@bp.route("/search", methods=["POST"])
+def search(session, user, company_session):  # Parameters auto-injected by name
+    ...
+```
+
+**Key DI Chains:**
+
+```python
+# Read-only chain (GET/read operations)
+get_db_session → get_current_user → get_company_identifier → get_company → get_company_session
+
+# Read-write chain (POST/PUT/DELETE operations)
+get_db_session_rw → get_current_user_rw → get_company_identifier_rw → get_company_rw → get_company_session_rw
+```
+
+**Rules:**
+- Use `_rw` variants for ANY endpoint that modifies data
+- Use read-only variants for GET/search/resume endpoints
+- Never mix RO and RW dependencies in the same endpoint (breaks session caching)
+- All deps in same chain share a single DB session per request (matches Chalice behavior)
+
+---
+
+### 2. Multi-Tenant Architecture
+
+**Three-Tier Tenant Isolation:**
+
+```python
+# 1. Control DB Session (global: users, companies, workspaces, permissions)
+session: Session = Depends(get_db_session)
+session.query(User).filter(...)
+
+# 2. Tenant DB Session (company-specific: CFDIs, payments, attachments)
+company_session: Session = Depends(get_company_session)
+company_session.query(CFDI).filter(...)
+
+# 3. Company Identifier (extracted from body/domain/header/path)
+company_identifier: Identifier = Depends(get_company_identifier)
+```
+
+**Tenant Extraction Flow (in order of precedence):**
+
+```python
+# From dependencies/common.py:_extract_company_identifier
+1. Body: json_body.get("company_identifier")
+2. Domain: json_body["domain"][0][2]  # [["company_identifier", "=", "<UUID>"]]
+3. Header: request.headers.get("company_identifier")
+4. Path: request.path_params.get("company_identifier") or .get("cid")
+```
+
+**Tenant Session Factory:**
+
+```python
+# chalicelib/controllers/tenant/session.py
+def new_company_session(tenant_url: str, comment: str, read_only: bool):
+    # Creates isolated session for company-specific schema
+    with new_company_session(tenant_url, comment="api_call", read_only=True) as cs:
+        cs.query(CFDI).filter(...)
+```
+
+---
+
+### 3. Event-Driven Architecture
+
+**EventBus Pattern (SQS-backed async workflows):**
+
+```python
+# 1. Define Domain Event
+@dataclass
+class CFDIExportCreated(DomainEvent):
+    company_identifier: Identifier
+    export_type: str
+    period: datetime
+
+# 2. Subscribe Handler (in chalicelib/bus.py:suscribe_all_handlers)
+bus.subscribe(
+    event_type=EventType.USER_EXPORT_CREATED,
+    handler=SQSHandler(queue_url=envars.SQS_EXPORT),
+)
+
+# 3. Publish Event
+bus = get_global_bus()
+bus.publish(EventType.USER_EXPORT_CREATED, event)
+```
+
+**Critical Event Patterns:**
+- **SAT Queries**: `SAT_WS_QUERY_SENT → SAT_WS_QUERY_VERIFY_NEEDED → SAT_WS_QUERY_DOWNLOAD_READY → SAT_METADATA_DOWNLOADED`
+- **Exports**: `USER_EXPORT_CREATED → SQS_EXPORT` (processed by Lambda worker)
+- **Scraper**: `REQUEST_SCRAP → SQS_SCRAP_ORCHESTRATOR → SQS_SCRAP_DELAY`
+- **Odoo/ADD**: `ADD_SYNC_REQUEST_CREATED → SQS_ADD_DATA_SYNC`
+
+**Rules:**
+- Initialize bus handlers in `main.py:startup_event()` (CRITICAL — without this, `bus.publish()` logs `NO_HANDLERS`)
+- Use `bus.publish()` for async, `handler.handle()` for sync
+- LOCAL_INFRA mode: routes through real LocalStack SQS (not in-memory `SQSClientLocal`)
+
+---
+
+### 4. Controller Pattern (Business Logic Layer)
+
+**CommonController Base Class (chalicelib/controllers/common.py):**
+
+```python
+class CFDIController(CommonController):
+    model = CFDI  # Tenant model
+    fuzzy_fields = (CFDI.UUID, CFDI.NombreEmisor, CFDI.NombreReceptor)
+    _order_by = "Fecha DESC"
+    
+    @classmethod
+    def search(cls, domain, fields, order_by, limit, offset, active, fuzzy_search, *, session):
+        # Returns: (records, next_page, total_records)
+        ...
+    
+    @classmethod
+    def resume(cls, domain, fuzzy_search, *, resume_type, session):
+        # Tax calculations (IVA/ISR aggregations)
+        ...
+```
+
+**Key Methods:**
+- `search()`: Paginated query with domain filters, fuzzy search, ordering
+- `create()`: Single record creation with permission checks
+- `update()`: Batch update with context validation
+- `delete()`: Soft delete (sets `active=False`)
+- `resume()`: Tax aggregation (IVA/ISR totals)
+- `export()`: XLSX/XML/PDF generation via S3 presigned URLs
+
+**Domain Filters (Odoo-style):**
+
+```python
+domain = [
+    ["company_identifier", "=", company_id],
+    ["Fecha", ">=", "2024-01-01"],
+    ["TipoDeComprobante", "in", ["I", "E"]],
+    "|",  # OR operator
+    ["Estatus", "=", True],
+    ["active", "=", True],
+]
+```
+
+---
+
+### 5. Exception Handling (Chalice-Compatible)
+
+**Custom HTTP Exceptions (exceptions.py):**
+
+```python
+# ✅ CORRECT — Use these for all errors
+from exceptions import BadRequestError, UnauthorizedError, ForbiddenError, NotFoundError
+
+@router.post("/validate")
+def validate(body: dict = Body(...)):
+    if not body.get("rfc"):
+        raise BadRequestError("RFC is required")
+    if user.email not in ADMIN_EMAILS:
+        raise ForbiddenError("Only admin users can perform this action")
+    if not company:
+        raise NotFoundError("Company not found")
+
+# ❌ WRONG — DO NOT use FastAPI's HTTPException directly
+from fastapi import HTTPException
+raise HTTPException(status_code=400, detail="Bad request")  # Breaks frontend!
+```
+
+**Global Exception Handlers (main.py):**
+
+```python
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    # Missing access_token → 401 UnauthorizedError
+    # Other validation errors → 400 BadRequestError with human-readable message
+    return JSONResponse(status_code=400, content={"Code": "BadRequestError", "Message": "..."})
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    return JSONResponse(status_code=500, content={"Code": "InternalServerError", "Message": str(exc)})
+```
+
+---
+
+### 6. Router Organization
+
+**File Structure:**
+
+```
+routers/
+├── cfdi.py          # Core CFDI endpoints (22 routes)
+├── company.py       # Certificate upload, CRUD (11 routes)
+├── user.py          # User management
+├── workspace.py     # Workspace (tenant) management
+├── sat_query.py     # SAT web service queries
+├── scraper.py       # PDF/XML scraper orchestration
+├── license_bp.py    # Stripe billing integration
+├── pasto/           # Odoo/ADD integration
+│   ├── sync.py
+│   ├── metadata.py
+│   ├── config.py
+│   └── worker.py
+└── status.py        # Health check
+```
+
+**Naming Conventions:**
+
+```python
+# ✅ CORRECT — Match Chalice route names for frontend compatibility
+@router.post("/search")  # Was: @bp.route("/search", methods=["POST"])
+@router.post("/export")
+@router.post("/massive_export")
+@router.get("/{cid}/emitidos/ingresos/{anio}/{mes}/resumen")
+
+# ❌ WRONG — DO NOT rename routes (breaks frontend)
+@router.post("/search_cfdis")  # Frontend expects "/search"
+```
+
+**Router Registration (main.py):**
+
+```python
+# All routes under /api prefix (matches Chalice api_gateway_stage)
+app.include_router(cfdi.router, prefix="/api/CFDI")
+app.include_router(company.router, prefix="/api/Company")
+app.include_router(user.router, prefix="/api/User")
+```
+
+---
+
+## Code Standards
+
+### 1. Type Hints (Mandatory)
+
+```python
+# ✅ CORRECT — Full type annotations
+from typing import Any
+from sqlalchemy.orm import Session
+from chalicelib.new.shared.domain.primitives import Identifier
+
+def process_export(
+    company_identifier: Identifier,
+    period: datetime,
+    session: Session,
+) -> dict[str, Any]:
+    ...
+
+# ❌ WRONG — Missing types
+def process_export(company_identifier, period, session):
+    ...
+```
+
+### 2. Naming Conventions
+
+**Variables & Functions:**
+- `snake_case` for all Python code (variables, functions, modules)
+- `PascalCase` for classes, Pydantic models, Enums
+- `SCREAMING_SNAKE_CASE` for constants
+
+**Database Models:**
+- Control schema: `snake_case` table names (`user`, `company`, `workspace`)
+- Tenant schema: Match SAT CFDI field names EXACTLY (`TipoDeComprobante`, `RegimenFiscal`)
+  - Reason: XML parsing requires exact CFDI 4.0 field names for xmltodict mapping
+
+```python
+# ✅ CORRECT — Preserves SAT field names
+class CFDI(TenantBaseModel):
+    UUID = Column(String, primary_key=True)
+    TipoDeComprobante = Column(String)  # "I" (Ingreso), "E" (Egreso), "P" (Pago)
+    RegimenFiscal = Column(String)
+    Fecha = Column(DateTime)
+
+# ❌ WRONG — DO NOT snake_case CFDI fields
+class CFDI(TenantBaseModel):
+    uuid = Column(String)
+    tipo_de_comprobante = Column(String)  # Breaks XML parsing!
+```
+
+### 3. Imports
+
+**Order (enforced by Ruff):**
+1. Standard library
+2. Third-party (FastAPI, SQLAlchemy, etc.)
+3. Local application (`chalicelib`, `dependencies`, `exceptions`)
+
+```python
+# ✅ CORRECT
+import uuid
+from datetime import date, datetime
+
+from fastapi import APIRouter, Body, Depends
+from sqlalchemy.orm import Session
+
+from chalicelib.controllers.cfdi import CFDIController
+from dependencies import get_company_session, get_current_user_rw
+from exceptions import BadRequestError
+```
+
+### 4. Logging
+
+**Structured JSON Logging (chalicelib/logger.py):**
+
+```python
+from chalicelib.logger import DEBUG, INFO, WARNING, ERROR, EXCEPTION, log
+from chalicelib.modules import Modules
+
+# ✅ CORRECT — Structured logging with module + code + context
+log(
+    Modules.SEARCH,
+    DEBUG,
+    "FUZZY_SEARCH",
+    {
+        "fuzzy_term": fuzzy_search,
+        "company_identifier": str(company_id),
+    },
+)
+
+log(
+    Modules.IVA,
+    INFO,
+    "EXPORT_IVA_STARTED",
+    {
+        "period": period.isoformat(),
+        "yearly": yearly,
+        "issued": issued,
+    },
+)
+
+# ❌ WRONG — DO NOT use print() or unstructured logging
+print(f"Searching for {fuzzy_search}")
+logging.info("Export started")
+```
+
+**Log Levels:**
+- `DEBUG`: Verbose info (only in dev)
+- `INFO`: Important state changes (query sent, export created)
+- `WARNING`: Unexpected but recoverable (NO_HANDLERS, LOG_IN_LIMIT)
+- `ERROR`: Actionable errors (DB timeout, external API failure)
+- `EXCEPTION`: Critical failures (unhandled exceptions, data corruption)
+
+---
+
+## Database & Session Management
+
+### 1. Session Lifecycle
+
+**Context Manager Pattern (ALWAYS):**
+
+```python
+# ✅ CORRECT — Auto-commit on success, auto-rollback on error
+from chalicelib.new.utils.session import new_session
+
+with new_session(comment="export_cfdi", read_only=False) as session:
+    company = session.query(Company).filter(...).one()
+    session.add(export_record)
+    # Auto-commits here if no exception
+
+# ❌ WRONG — Manual session management (risk of leaks)
+session = SessionLocal()
+try:
+    ...
+    session.commit()
+finally:
+    session.close()
+```
+
+**Session Configuration:**
+
+```python
+# chalicelib/new/utils/session.py
+def new_session(
+    comment: str,  # Shows in pg_stat_activity.application_name
+    read_only: bool = False,
+    statement_timeout: timedelta = None,  # Auto-cancel long queries
+):
+    session = get_session_maker(read_only)(info={"comment": comment})
+    session.execute(text(f"SET application_name = '{comment}'"))
+    session.execute(f"SET SESSION statement_timeout = {timeout_ms}")
+    ...
+```
+
+**Statement Timeouts:**
+- Endpoints: 25 seconds (prevents frontend timeout)
+- Background tasks: 5 minutes (exports, imports)
+- Admin operations: 15 minutes (migrations, bulk updates)
+
+### 2. Read-Only vs Read-Write
+
+**Separate Engine Pools:**
+
+```python
+# chalicelib/schema/__init__.py
+engine = create_engine(connection_uri, poolclass=NullPool)  # Read-write
+engine_ro = create_engine(connection_uri_ro, poolclass=NullPool)  # Read-only replica
+
+def get_session_maker(read_only: bool = False) -> sessionmaker:
+    return SessionLocalRo if read_only else SessionLocal
+```
+
+**Usage Rules:**
+- Read-only: GET requests, search, resume, calculations
+- Read-write: POST/PUT/DELETE, exports (creates export record), certificate upload
+
+### 3. Tenant Session Management
+
+**Per-Company Schema Isolation:**
+
+```python
+# chalicelib/controllers/tenant/session.py
+def new_company_session(tenant_url: str, comment: str, read_only: bool):
+    # tenant_url format: postgresql://user:pass@host:5432/db_name.schema_name
+    engine = create_engine(tenant_url, poolclass=NullPool)
+    Session = sessionmaker(bind=engine)
+    session = Session(info={"comment": comment})
+    session.execute(f"SET search_path TO {schema_name}")
+    ...
+```
+
+**Schema Naming:**
+- Control DB: `public` (users, companies, workspaces)
+- Tenant schemas: `tenant_<company_id>` (cfdis, payments, attachments)
+
+---
+
+## Security & Authentication
+
+### 1. Auth Flow
+
+**Cognito Token Validation:**
+
+```python
+# dependencies/__init__.py:_make_current_user
+def get_current_user(
+    session: Session = Depends(get_db_session),
+    access_token: str = Header(alias="access_token"),  # NOT "Authorization"
+) -> User:
+    return UserController.get_by_token(access_token, session=session)
+```
+
+**Token Header:**
+- Name: `access_token` (custom, not `Authorization: Bearer`)
+- Source: Cognito User Pool + external B2C (Siigo SSO)
+- Validation: `UserController.get_by_token()` → decodes JWT, verifies signature, loads user
+
+### 2. Permission Checking
+
+**Role-Based Access Control:**
+
+```python
+# chalicelib/controllers/permission.py
+class Role(Enum):
+    OPERATOR = "OPERATOR"  # Full access to company data
+    PAYROLL = "PAYROLL"    # Only nomina (payroll) CFDIs
+
+# dependencies/__init__.py:_assert_user_can_access_company
+def check_permission(user: User, company: Company, session: Session, role: Role = Role.OPERATOR):
+    count = session.query(Permission).filter(
+        Permission.user_id == user.id,
+        Permission.company_id == company.id,
+        Permission.role == role.name,
+    ).count()
+    if not count:
+        raise UnauthorizedError("No company found")
+```
+
+**Admin-Only Endpoints:**
+
+```python
+from dependencies import get_admin_user_rw
+from chalicelib.new.config.infra.envars.control import ADMIN_EMAILS
+
+@router.post("/admin_create")
+def admin_create(
+    body: dict = Body(...),
+    admin_user: User = Depends(get_admin_user_rw),  # Validates email in ADMIN_EMAILS
+):
+    ...
+```
+
+### 3. Input Validation
+
+**Pydantic Models (Preferred for Complex Validation):**
+
+```python
+from pydantic import BaseModel, EmailStr, validator
+
+class CompanyCreateRequest(BaseModel):
+    cer: str  # Base64-encoded certificate
+    key: str  # Base64-encoded private key
+    pas: str  # Certificate password
+    workspace_identifier: str
+    
+    @validator("cer", "key")
+    def validate_base64(cls, v):
+        try:
+            base64.b64decode(v)
+        except Exception:
+            raise ValueError("Invalid base64")
+        return v
+
+@router.post("/")
+def create(body: CompanyCreateRequest, ...):
+    cer = base64.b64decode(body.cer)
+    ...
+```
+
+**FastAPI Validation (for Simple Cases):**
+
+```python
+# Automatic validation via Body(...) + type hints
+@router.post("/set_isr_percentage")
+def set_isr_percentage(
+    body: dict = Body(...),
+    company: Company = Depends(get_company_rw),
+):
+    percentage = body["percentage"]  # KeyError if missing
+    if percentage not in ISR_PERCENTAGE_LIST:
+        raise BadRequestError(f"ISR percentage must be one of {ISR_PERCENTAGE_LIST}")
+    ...
+```
+
+---
+
+## Performance & Optimization
+
+### 1. Query Optimization
+
+**Fuzzy Search (Configurable via envars.control.FUZZY_SEARCH_ACTIVE):**
+
+```python
+# chalicelib/controllers/common.py:CommonController._fuzzy_search
+def _fuzzy_search(cls, query, fuzzy_search):
+    # Combines all fuzzy_fields with '🍔' separator
+    fuzzy_fields_combined = (
+        FUZZY_CHAR_SEPARATOR +
+        coalesce(cast(field, Text), FUZZY_CHAR_SEPARATOR) +
+        FUZZY_CHAR_SEPARATOR
+    )
+    return query.filter(unaccent(fuzzy_fields_combined).ilike(f"%{fuzzy_search}%"))
+```
+
+**Domain Filters with Auto-Joins:**
+
+```python
+# Automatic JOIN resolution from domain filters
+domain = [
+    ["c_moneda.code", "=", "MXN"],  # Auto-joins c_moneda table
+    ["c_regimen_fiscal.name", "ilike", "General"],
+]
+query = CFDIController.apply_domain(query, domain, session=session)
+```
+
+**Pagination Best Practices:**
+
+```python
+# ✅ CORRECT — Limit + offset for large datasets
+@router.post("/search")
+def search(json_body: dict = Depends(get_json_body), ...):
+    limit = json_body.get("limit", 50)  # Default 50 (from chalicelib/config.py:PAGE_SIZE)
+    offset = json_body.get("offset", 0)
+    records, next_page, total_records = CFDIController.search(
+        domain=domain,
+        limit=limit,
+        offset=offset,
+        session=company_session,
+    )
+    return {"data": records, "next_page": next_page, "total_records": total_records}
+```
+
+### 2. Export Performance
+
+**Async Export via EventBus:**
+
+```python
+# For large exports (>10k records), use async processing
+@router.post("/massive_export")
+def massive_export(
+    json_body: dict = Depends(get_json_body),
+    company_session: Session = Depends(get_company_session_rw),
+    company_identifier: Identifier = Depends(get_company_identifier_rw),
+):
+    bus = get_global_bus()
+    exporter = CFDIExporter(company_session=company_session, bus=bus, ...)
+    result = exporter.export_event(json_body=json_body, company_identifier=company_identifier)
+    # Publishes EventType.MASSIVE_EXPORT_CREATED → SQS_MASSIVE_EXPORT → Lambda worker
+    return {"export_identifier": result}
+```
+
+**Sync Export (for small datasets):**
+
+```python
+@router.post("/export")
+def export(
+    json_body: dict = Depends(get_json_body),
+    company_session: Session = Depends(get_company_session_rw),
+    user: User = Depends(get_current_user_rw),
+):
+    # Directly generates XLSX/XML/PDF and uploads to S3
+    return common.export(json_body, CFDIController, company_session=company_session, user=user)
+```
+
+---
+
+## Testing
+
+### 1. Test Structure
+
+```
+tests/
+├── unit/
+│   ├── test_controllers/
+│   ├── test_domain/
+│   └── test_infra/
+├── integration/
+│   ├── test_routes/
+│   └── test_db/
+└── conftest.py  # Shared fixtures
+```
+
+### 2. Fixtures
+
+```python
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+@pytest.fixture
+def session():
+    engine = create_engine("postgresql://test:test@localhost/test_db")
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.rollback()
+    session.close()
+
+@pytest.fixture
+def company_session(company):
+    tenant_url = company.tenant_db_url_with_schema
+    engine = create_engine(tenant_url)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.rollback()
+    session.close()
+```
+
+### 3. Markers
+
+```python
+# pyproject.toml:[tool.pytest.ini_options]
+markers = [
+    "infra: real infrastructure related tests",
+    "slow: slow tests",
+    "to_solve: Errors to be solved",
+    "third_party: tests that depends on third party services",
+]
+
+# Usage
+@pytest.mark.slow
+@pytest.mark.third_party
+def test_sat_query_integration():
+    ...
+```
+
+### 4. Run Tests
+
+```bash
+# Parallel execution (auto-detect CPU cores)
+pytest -n auto -m "not third_party"
+
+# With coverage
+pytest --cov=chalicelib --cov-report=html
+
+# Specific markers
+pytest -m "not slow and not third_party"
+```
+
+---
+
+## Environment Variables
+
+**Configuration Pattern (chalicelib/new/config/infra/envars/):**
+
+```python
+# envars/__init__.py
+from .control import *
+from .stripe import *
+from .sqs import *
+from .sql import *
+from .technical import *
+
+# envars/control.py
+ADMIN_EMAILS = os.getenv("ADMIN_EMAILS", "").split(",")
+ISR_PERCENTAGE_LIST = [0.01, 0.0125, 0.01875]
+FUZZY_SEARCH_ACTIVE = os.getenv("FUZZY_SEARCH_ACTIVE", "true").lower() == "true"
+
+# envars/sqs.py
+SQS_EXPORT = os.getenv("SQS_EXPORT", "https://sqs.us-east-1.amazonaws.com/123/export")
+SQS_PROCESS_PACKAGE_METADATA = os.getenv("SQS_PROCESS_PACKAGE_METADATA", "...")
+...
+```
+
+**Local Development (.env):**
+
+```env
+LOCAL_INFRA=true
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=siigo_fiscal
+DB_USER=postgres
+DB_PASSWORD=postgres
+LOG_LEVEL=DEBUG
+FUZZY_SEARCH_ACTIVE=true
+```
+
+---
+
+## Migration from Chalice (Backward Compatibility)
+
+### 1. Route Naming (DO NOT CHANGE)
+
+```python
+# ✅ CORRECT — Preserve Chalice route paths
+@router.post("/CFDI/search")  # Was: @bp.route("/search", methods=["POST"])
+@router.post("/Company/upload_cer")
+@router.get("/status")
+
+# ❌ WRONG — Breaking frontend
+@router.post("/cfdi/search")  # Frontend expects "/CFDI/search"
+```
+
+### 2. Response Format (CRITICAL)
+
+```python
+# ✅ CORRECT — Chalice-compatible error shape
+{
+    "Code": "BadRequestError",
+    "Message": "RFC is required"
+}
+
+# ❌ WRONG — FastAPI default (breaks frontend)
+{
+    "detail": "RFC is required"
+}
+```
+
+### 3. Request Body Access
+
+```python
+# ✅ CORRECT — FastAPI async body parsing
+@router.post("/endpoint")
+async def endpoint(json_body: dict = Depends(get_json_body)):
+    # get_json_body handles GET (empty dict) vs POST (await request.json())
+    ...
+
+# ❌ WRONG — Chalice pattern (no longer works)
+@bp.route("/endpoint", methods=["POST"])
+def endpoint():
+    json_body = bp.current_request.json_body  # bp no longer exists
+```
+
+### 4. Dependency Injection Migration
+
+```python
+# ✅ BEFORE (Chalice SuperBlueprint)
+@bp.route("/search", methods=["POST"])
+def search(session, user, company_session):  # Auto-injected by parameter name
+    return CFDIController.search(..., session=company_session)
+
+# ✅ AFTER (FastAPI Depends)
+@router.post("/search")
+def search(
+    json_body: dict = Depends(get_json_body),
+    company_session: Session = Depends(get_company_session),
+):
+    return CFDIController.search(..., session=company_session)
+```
+
+---
+
+## CORS Configuration
+
+**Local Development Only:**
+
+```python
+# main.py
+if envars.LOCAL_INFRA:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173"],  # Vite dev server
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["Content-Type", "access_token", "authorization"],
+        expose_headers=["*"],
+        max_age=86400,
+    )
+```
+
+**Production (AWS):**
+- CORS handled by API Gateway/CloudFront
+- No middleware needed in Lambda
+
+---
+
+## Common Patterns
+
+### 1. CRUD Endpoints
+
+```python
+@router.post("/search")
+def search(
+    json_body: dict = Depends(get_json_body),
+    company_session: Session = Depends(get_company_session),
+):
+    return common.search(json_body, CFDIController, session=company_session)
+
+@router.post("/")
+def create(
+    body: dict = Body(...),
+    session: Session = Depends(get_db_session_rw),
+    user: User = Depends(get_current_user_rw),
+):
+    return common.create(body, CompanyController, session=session, user=user)
+
+@router.put("/")
+def update(
+    body: dict = Body(...),
+    session: Session = Depends(get_db_session_rw),
+    user: User = Depends(get_current_user_rw),
+):
+    return common.update(body, CompanyController, session=session, user=user)
+
+@router.delete("/")
+def delete(
+    body: dict = Body(...),
+    session: Session = Depends(get_db_session_rw),
+    user: User = Depends(get_current_user_rw),
+):
+    return common.delete(body, CompanyController, session=session, user=user)
+```
+
+### 2. Resume (Tax Calculations)
+
+```python
+@router.post("/resume")
+def resume(
+    body: dict = Body(...),
+    company_session: Session = Depends(get_company_session),
+):
+    domain = body.get("domain", [])
+    fuzzy_search = body.get("fuzzy_search", [])
+    resume_type = ResumeType[body.get("TipoDeComprobante", "BASIC")]
+    log(Modules.RESUME, DEBUG, "RESUME", {"company_identifier": domain[0][2], "body": body})
+    return CFDIController.resume(
+        domain,
+        fuzzy_search,
+        resume_type=resume_type,
+        session=company_session,
+    )
+```
+
+### 3. Async Concurrent Processing
+
+```python
+@router.post("/get_iva_all")
+async def get_iva_all(
+    body: dict = Body(...),
+    company_session: Session = Depends(get_company_session),
+):
+    """Concurrently fetch IVA for all months in a year."""
+    period_date = date.fromisoformat(body["period"])
+    year = period_date.year
+    end_month = period_date.month
+    
+    getter = IVAGetter(company_session=company_session)
+    exercise = getter.get_time_window(period_date, yearly=True)
+    
+    # Parallel execution with asyncio
+    tasks = [
+        asyncio.create_task(
+            asyncio.to_thread(_get_monthly_period, getter, year, month, exercise)
+        )
+        for month in range(1, end_month + 1)
+    ]
+    results_list = await asyncio.gather(*tasks)
+    return {month_key: month_data for month_key, month_data in results_list}
+```
+
+---
+
+## DO NOT
+
+1. **DO NOT** change route paths (breaks frontend)
+2. **DO NOT** use `HTTPException` directly (use `exceptions.py` wrappers)
+3. **DO NOT** mix read-only and read-write dependencies in same endpoint
+4. **DO NOT** snake_case CFDI model fields (must match SAT XML schema)
+5. **DO NOT** use `print()` or unstructured logging
+6. **DO NOT** create sessions outside context managers
+7. **DO NOT** forget to initialize EventBus handlers in `startup_event()`
+8. **DO NOT** commit secrets (use SSM Parameter Store / Secrets Manager)
+9. **DO NOT** use `time.sleep()` in endpoints (blocks event loop)
+10. **DO NOT** rename `access_token` header (Cognito integration depends on it)
+
+---
+
+## Code Review Checklist
+
+Before committing:
+- [ ] Type hints on all function signatures?
+- [ ] Using correct DI chain (RO vs RW)?
+- [ ] Error handling uses `exceptions.py` classes?
+- [ ] Logging uses structured `log()` with module + code + context?
+- [ ] Session management uses context managers?
+- [ ] Route paths match Chalice originals?
+- [ ] Pydantic models for complex validation?
+- [ ] Tests cover new code paths?
+- [ ] No secrets in code (use envars)?
+- [ ] Ruff passes (`ruff check .`)?
+- [ ] mypy passes (`mypy chalicelib routers dependencies`)?
+
+---
+
+## Documentation References
+
+- **FastAPI Docs**: https://fastapi.tiangolo.com/
+- **SQLAlchemy 1.x**: https://docs.sqlalchemy.org/en/14/
+- **Pydantic v2**: https://docs.pydantic.dev/2.0/
+- **CFDI 4.0 Spec**: http://www.sat.gob.mx/esquemas/retencionpago/2/cfdi40.xsd
+
+---
+
+## Project-Specific Conventions
+
+### CFDI Domain
+
+**TipoDeComprobante (Invoice Types):**
+- `I` = Ingreso (Income)
+- `E` = Egreso (Credit Note)
+- `P` = Pago (Payment)
+- `N` = Nomina (Payroll)
+- `T` = Traslado (Transfer)
+
+**Estatus (Status):**
+- `True` = Valid (timbrado by SAT)
+- `False` = Cancelled (cancelado)
+
+**MetodoPago (Payment Method):**
+- `PUE` = Pago en una sola exhibición (single payment)
+- `PPD` = Pago en parcialidades o diferido (installments)
+
+### IVA/ISR Calculations
+
+**IVA (Value-Added Tax):**
+- Standard rate: 16%
+- Border region: 8%
+- Exempt: 0%
+
+**ISR (Income Tax):**
+- Configurable per company: 1%, 1.25%, 1.875%
+- Stored in `company.data["isr_percentage"]`
+
+---
+
+## Summary
+
+This FastAPI backend is a **mission-critical migration** from AWS Chalice to FastAPI for a Mexican fiscal compliance SaaS. The architecture emphasizes:
+
+1. **Backward Compatibility**: All responses, routes, and error shapes MUST match Chalice for frontend stability
+2. **Multi-Tenancy**: Per-company database schemas with strict isolation
+3. **Event-Driven Async**: SQS-backed EventBus for scalable background processing
+4. **Performance**: Read-only replicas, statement timeouts, async exports, fuzzy search
+5. **Security**: Cognito auth, role-based permissions, admin-only endpoints
+6. **Maintainability**: Strong typing, structured logging, controller pattern, extensive testing
+
+**When in doubt, preserve the existing pattern. This codebase prioritizes stability over innovation.**

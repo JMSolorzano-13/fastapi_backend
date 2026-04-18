@@ -1,0 +1,15 @@
+{
+  "identifier": "11111111-1111-1111-1111-111111111111",
+  "execute_at": null,
+  "company_identifier": "00000000-0000-0000-0000-00000000ca01",
+  "company_rfc": "",
+  "download_type": "ISSUED",
+  "request_type": "CFDI",
+  "is_manual": true,
+  "start": "2026-01-15T12:00:00Z",
+  "end": "2026-01-16T12:00:00Z",
+  "query_origin": null,
+  "origin_sent_date": null,
+  "wid": 7,
+  "cid": 42
+}

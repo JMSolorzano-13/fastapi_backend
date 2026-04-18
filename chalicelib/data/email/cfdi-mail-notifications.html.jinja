@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:o="urn:schemas-microsoft-com:office:office">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CFDIs con errores</title>
+    <!--[if mso]>
+      <noscript>
+        <xml>
+          <o:OfficeDocumentSettings>
+            <o:PixelsPerInch>96</o:PixelsPerInch>
+          </o:OfficeDocumentSettings>
+        </xml>
+      </noscript>
+    <![endif]-->
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #mail-table-container {
+            width: 100%;
+            border-collapse: collapse;
+            border: 0;
+            border-spacing: 0;
+            background: #ffffff;
+        }
+
+        #mail-content-container {
+            width: 950px;
+            border-collapse: collapse;
+            border: 1px solid #dddddd;
+            border-spacing: 0;
+            text-align: left;
+        }
+
+        #mail-content-header {
+            padding: 40px 0 30px 0;
+        }
+
+        #ez-title {
+            padding: 0 0 0 15px;
+            font-size: 35px;
+        }
+
+        #mail-content-body {
+            padding: 0 30px 0 30px;
+        }
+
+        #mail-content-footer {
+            padding: 30px;
+        }
+
+        section {
+            margin-bottom: 10px;
+        }
+
+        .cfdi-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .cfdi-table-row {
+            border: solid 1px rgb(196, 196, 196);
+            padding: 5px;
+        }
+
+        .cfdi-table-row th {
+            border: solid 1px rgb(196, 196, 196);
+            padding: 5px;
+        }
+
+        .cfdi-table-row td {
+            border: solid 1px rgb(196, 196, 196);
+            padding: 5px;
+        }
+
+        .button {
+            color: rgb(0, 112, 179);
+            text-decoration-color: #ffffff;
+            cursor: pointer;
+        }
+
+        .button:hover {
+            text-decoration-color: rgb(0, 112, 179);
+        }
+
+        .button:visited {
+            color: #ffffff;
+        }
+
+        strong {
+            text-decoration: none;
+            color: rgb(0, 112, 179);
+        }
+
+        strong:hover {
+            color: rgb(0, 112, 179);
+        }
+
+        #correo {
+            text-decoration: none;
+            color: black;
+        }
+
+        #mail-password-table {
+            margin-top: 10px;
+            background-color: #ececec;
+            padding: 10px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    {% set months = {
+    '01': 'enero', '02': 'febrero', '03': 'marzo', '04': 'abril', '05': 'mayo',
+    '06': 'junio', '07': 'julio', '08': 'agosto', '09': 'septiembre', '10': 'octubre',
+    '11': 'noviembre', '12': 'diciembre'
+    } %}
+    {% set cfdiTypeURL = {
+    'I': 'ingress',
+    'E': 'egress',
+    'N': 'payroll',
+    'T': 'transfer',
+    'P': 'payment'
+    } %}
+
+    {% set cfdiTypeTable = {
+    'I': 'ingreso',
+    'E': 'egreso',
+    'N': 'nomina',
+    'P': 'pago',
+    'T': 'trasladado'
+    } %}
+
+    {% set is_siigo = envars.IS_SIIGO %}
+
+    {% set app_url = envars.FRONTEND_BASE_URL %}
+
+    {% set app_name = "Siigo fiscal" if is_siigo else "ezaudita" %}
+
+    {% set logo_url = envars.VITE_APP_LOGO_URL %}
+
+    {% set support_url = "https://www.siigo.com/mx/soporte/#soporte" if is_siigo else
+    "soporte@ezaudita.com" %}
+
+
+    <table role="presentation" id="mail-table-container">
+        <tr>
+            <td align="center" style="padding: 0">
+                <table role="presentation" id="mail-content-container">
+                    <tr style="{{'background-color: #009DFF' if is_siigo else ''}}">
+                        <td align="left" id="mail-content-header" style="padding: 30px">
+                            <table>
+                                <tr>
+                                    <td>
+                                        <img src='{{ logo_url }}' alt='{{ "logo " ~ app_name}}' height="40"
+                                            style="height: 40px" />
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td id="mail-content-body">
+                            <div id="mail-content-message">
+                                {% if user is defined %}
+                                <p>
+                                    <b>Hola {{ user.name }},</b>
+                                </p>
+                                {% endif %}
+
+                                <p>
+                                    Te compartimos el detalle de las validaciones que
+                                    <b>{{app_name}}</b>® realiza al analizar tus CFDIs de la empresa
+                                    <i>{{ company.name }}</i> –
+                                    <i>{{ company.rfc }}</i>; revisa esta información para que puedas tomar las medidas
+                                    necesarias:
+                                </p>
+
+                                <p style="font-size: 12px">
+                                    Este mensaje contiene solo las
+                                    <u>validaciones realizadas desde el último envío y hasta la
+                                        fecha de este correo</u>; te recomendamos ir a los listados relacionados a cada
+                                    validación para analizar los registros anteriores.
+                                </p>
+
+                                <!-- CFDIs WITH ERRORS -->
+
+                                {% if cfdis_with_errors_issued is defined %}
+                                <h1>CFDIs Emitidos con error</h1>
+                                {% if cfdis_with_errors_issued %}
+                                <section>
+                                    <table class="cfdi-table">
+                                        <thead>
+                                            <tr class="cfdi-table-row">
+                                                <th>Fecha Emisión</th>
+                                                <th>Folio</th>
+                                                <th>Serie</th>
+                                                <th>UUID</th>
+                                                <th>Receptor</th>
+                                                <th>Error CFDI</th>
+                                                <th>Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for cfdi in cfdis_with_errors_issued %}
+                                            <tr class="cfdi-table-row">
+                                                <td>{{ cfdi.Fecha.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{cfdi.Folio or ""}}</td>
+                                                <td>{{cfdi.Serie or ""}}</td>
+                                                <td>
+                                                    <a href="{{ app_url ~ '/cfdi-issued?cid=' ~ company.identifier ~ '&search=' ~ cfdi.UUID ~ '&period=' ~ (cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%Y') ~ '-' ~ months[(cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%m')] ~ '&type=' ~ cfdiTypeURL[cfdi.TipoDeComprobante] ~ '&state=all' }}"
+                                                        target="_blank">
+                                                        {{ cfdi.UUID }}
+                                                    </a>
+                                                </td>
+                                                <td>{{ cfdi.NombreReceptor }}</td>
+                                                <td>{{ cfdi.errors_string }}</td>
+                                                <td>{{ "${:,.2f}".format(cfdi.Total) }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </section>
+                                {% if user is defined and cfdis_with_errors_received and
+                                cfdis_cancelled_issued or not cfdis_cancelled_issued %} {% if
+                                cfdis_with_errors_issued|length > 10 %}
+                                <table>
+                                    <tr>
+                                        <td style="padding: 3px 0 0 10px">
+                                            <p>
+                                                Estos son los 10 registros más recientes encontrados;
+                                                haz clic en
+                                                <a class="button" href={{ errors_issued_link }}>Ver más</a>
+                                                para ir al listado completo.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                {% endif %}
+                                <br /><br /><br />
+                                {% endif %} {% else %}
+                                <p>No hay CFDIs emitidos con errores</p>
+                                <br /><br /><br />
+                                {% endif %} {% endif %} {% if cfdis_with_errors_received is
+                                defined %}
+                                <h1>CFDIs Recibidos con error</h1>
+                                {% if cfdis_with_errors_received %}
+                                <section>
+                                    <table class="cfdi-table">
+                                        <thead>
+                                            <tr class="cfdi-table-row">
+                                                <th>Fecha Emisión</th>
+                                                <th>Folio</th>
+                                                <th>Serie</th>
+                                                <th>UUID</th>
+                                                <th>Emisor</th>
+                                                <th>Error CFDI</th>
+                                                <th>Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for cfdi in cfdis_with_errors_received %}
+                                            <tr class="cfdi-table-row">
+                                                <td>{{ cfdi.Fecha.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{cfdi.Folio or ""}}</td>
+                                                <td>{{cfdi.Serie or ""}}</td>
+                                                <td>
+                                                    <a href="{{ app_url ~ '/cfdi-received?cid=' ~ company.identifier ~ '&search=' ~ cfdi.UUID ~ '&period=' ~ (cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%Y') ~ '-' ~ months[(cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%m')] ~ '&type=' ~ cfdiTypeURL[cfdi.TipoDeComprobante] ~ '&state=all' }}"
+                                                        target="_blank">
+                                                        {{ cfdi.UUID }}
+                                                    </a>
+                                                </td>
+                                                <td>{{ cfdi.NombreEmisor }}</td>
+                                                <td>{{ cfdi.errors_string }}</td>
+                                                <td>{{ "${:,.2f}".format(cfdi.Total) }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </section>
+                                {% if user is defined and cfdis_cancelled_issued and
+                                cfdis_cancelled_received or not cfdis_cancelled_received %} {%
+                                if cfdis_with_errors_received|length > 10 %}
+                                <table>
+                                    <tr>
+                                        <td style="padding: 3px 0 0 10px">
+                                            <p>
+                                                Estos son los 10 registros más recientes encontrados;
+                                                haz clic en
+                                                <a class="button" href={{ errors_received_link }}>Ver más</a>
+                                                para ir al listado completo.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                {% endif %}
+                                <br /><br /><br />
+                                {% endif %} {% else %}
+                                <p>No hay CFDIs recibidos con errores</p>
+                                <br /><br /><br />
+                                {% endif %} {% endif %}
+
+                                <!--CFDIs CANCELLED-->
+
+                                {% if cfdis_cancelled_issued is defined %}
+                                <h1>CFDIs Emitidos Cancelados</h1>
+                                {% if cfdis_cancelled_issued %}
+                                <section>
+                                    <table class="cfdi-table">
+                                        <thead>
+                                            <tr class="cfdi-table-row">
+                                                <th>Fecha Emisión</th>
+                                                <th>Tipo</th>
+                                                <th>Folio</th>
+                                                <th>Serie</th>
+                                                <th>Método de pago</th>
+                                                <th>UUID</th>
+                                                <th>Receptor</th>
+                                                <th>Fecha Cancelación</th>
+                                                <th>Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for cfdi in cfdis_cancelled_issued %}
+                                            <tr class="cfdi-table-row">
+                                                <td>{{ cfdi.Fecha.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{cfdiTypeTable[cfdi.TipoDeComprobante] | capitalize or ""}}</td>
+                                                <td>{{cfdi.Folio or ""}}</td>
+                                                <td>{{cfdi.Serie or ""}}</td>
+                                                <td>{{cfdi.MetodoPago or ""}}</td>
+                                                <td>
+                                                    <a href="{{ app_url ~ '/cfdi-issued?cid=' ~ company.identifier ~ '&search=' ~ cfdi.UUID ~ '&period=' ~ (cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%Y') ~ '-' ~ months[(cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%m')] ~ '&type=' ~ cfdiTypeURL[cfdi.TipoDeComprobante] ~ '&state=all' }}"
+                                                        target="_blank">
+                                                        {{ cfdi.UUID }}
+                                                    </a>
+                                                </td>
+                                                <td>{{ cfdi.NombreReceptor }}</td>
+                                                <td>{{ cfdi.FechaCancelacion.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{ "${:,.2f}".format(cfdi.Total) }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </section>
+                                {% if user is defined %} {% if cfdis_cancelled_issued|length >
+                                10 %}
+                                <table>
+                                    <tr>
+                                        <td style="padding: 3px 0 0 10px">
+                                            <p>
+                                                Estos son los 10 registros más recientes encontrados;
+                                                haz clic en
+                                                <a class="button" href={{ cancelled_issued_link }}>Ver más</a>
+                                                para ir al listado completo.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                {% endif %}
+                                <br /><br /><br />
+                                {% endif %} {% else %}
+                                <p>No hay CFDIs emitidos cancelados</p>
+                                <br /><br /><br />
+                                {% endif %} {% endif %} {% if cfdis_cancelled_received is
+                                defined %}
+                                <h1>CFDIs Recibidos Cancelados</h1>
+                                {% if cfdis_cancelled_received %}
+                                <section>
+                                    <table class="cfdi-table">
+                                        <thead>
+                                            <tr class="cfdi-table-row">
+                                                <th>Fecha Emisión</th>
+                                                <th>Tipo</th>
+                                                <th>Folio</th>
+                                                <th>Serie</th>
+                                                <th>Método de pago</th>
+                                                <th>UUID</th>
+                                                <th>Emisor</th>
+                                                <th>Fecha Cancelación</th>
+                                                <th>Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for cfdi in cfdis_cancelled_received %}
+                                            <tr class="cfdi-table-row">
+                                                <td>{{ cfdi.Fecha.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{cfdiTypeTable[cfdi.TipoDeComprobante] | capitalize or ""}}</td>
+                                                <td>{{cfdi.Folio or ""}}</td>
+                                                <td>{{cfdi.Serie or ""}}</td>
+                                                <td>{{cfdi.MetodoPago or ""}}</td>
+                                                <td>
+                                                    <a href="{{ app_url ~ '/cfdi-received?cid=' ~ company.identifier ~ '&search=' ~ cfdi.UUID ~ '&period=' ~ (cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%Y') ~ '-' ~ months[(cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%m')] ~ '&type=' ~ cfdiTypeURL[cfdi.TipoDeComprobante] ~ '&state=all' }}"
+                                                        target="_blank">
+                                                        {{ cfdi.UUID }}
+                                                    </a>
+                                                </td>
+                                                <td>{{ cfdi.NombreEmisor }}</td>
+                                                <td>{{ cfdi.FechaCancelacion.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{ "${:,.2f}".format(cfdi.Total) }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </section>
+                                {% if user is defined %} {% if cfdis_cancelled_received|length
+                                > 10 %}
+                                <table>
+                                    <tr>
+                                        <td style="padding: 3px 0 0 10px">
+                                            <p>
+                                                Estos son los 10 registros más recientes encontrados;
+                                                haz clic en
+                                                <a class="button" href={{ cancelled_received_link }}>Ver más</a>
+                                                para ir al listado completo.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                {% endif %}
+                                <br /><br /><br />
+                                {% endif %} {% else %}
+                                <p>No hay CFDIs recibidos cancelados</p>
+                                <br /><br /><br />
+                                {% endif %} {% endif %}
+
+                                <!--CFDIs WITH EFOS-->
+
+                                {% if cfdis_with_efos is defined %}
+                                <h1>CFDIs con EFOS</h1>
+                                {% if cfdis_with_efos %}
+                                <section>
+                                    <table class="cfdi-table">
+                                        <thead>
+                                            <tr class="cfdi-table-row">
+                                                <th>Fecha Emisión</th>
+                                                <th>Folio</th>
+                                                <th>Serie</th>
+                                                <th>UUID</th>
+                                                <th>Emisor</th>
+                                                <th>Estatus</th>
+                                                <th>Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for cfdi in cfdis_with_efos %}
+                                            <tr class="cfdi-table-row">
+                                                <td>{{ cfdi.Fecha.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{cfdi.Folio or ""}}</td>
+                                                <td>{{cfdi.Serie or ""}}</td>
+                                                <td>
+                                                    <a href="{{ app_url ~ '/' ~ ('cfdi-issued' if cfdi_is_issued else 'cfdi-received') ~ '?cid=' ~ company.identifier ~ '&search=' ~ cfdi.UUID ~ '&period=' ~ (cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%Y') ~ '-' ~ months[(cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%m')] ~ '&type=' ~ cfdiTypeURL[cfdi.TipoDeComprobante] ~ '&state=all' }}"
+                                                        target="_blank">
+                                                        {{ cfdi.UUID }}
+                                                    </a>
+                                                </td>
+                                                <td>{{ cfdi.NombreEmisor }}</td>
+                                                <td>{{ cfdi.efos.human_readable_status }}</td>
+                                                <td>{{ "${:,.2f}".format(cfdi.Total) }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </section>
+                                {% if user is defined %} {% if cfdis_with_efos|length > 10 %}
+                                <table>
+                                    <tr>
+                                        <td style="padding: 3px 0 0 10px">
+                                            <p>
+                                                Estos son los 10 registros más recientes encontrados;
+                                                haz clic en
+                                                <a class="button" href={{ efos_link }}>Ver más</a>
+                                                para ir al listado completo.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                {% endif %} {% endif %} {% else %}
+                                <p>No hay CFDIs con EFOS erróneos</p>
+                                <br /><br /><br />
+                                {% endif %} {% endif %}
+
+                                <!--CFDIs PUE WITH PAYMENTS-->
+
+                                {% if cfdis_pue_with_payments_issued is defined %}
+                                <h1>CFDIs PUE Emitidos con pagos relacionados</h1>
+                                {% if cfdis_pue_with_payments_issued %}
+                                <section>
+                                    <table class="cfdi-table">
+                                        <thead>
+                                            <tr class="cfdi-table-row">
+                                                <th>Fecha Emisión</th>
+                                                <th>Folio</th>
+                                                <th>Serie</th>
+                                                <th>UUID</th>
+                                                <th>RFC Receptor</th>
+                                                <th>Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for cfdi in cfdis_pue_with_payments_issued %}
+                                            <tr class="cfdi-table-row">
+                                                <td>{{ cfdi.Fecha.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{cfdi.Folio or ""}}</td>
+                                                <td>{{cfdi.Serie or ""}}</td>
+                                                <td>
+                                                    <a href="{{ app_url ~ '/cfdi-issued?cid=' ~ company.identifier ~ '&search=' ~ cfdi.UUID ~ '&period=' ~ (cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%Y') ~ '-' ~ months[(cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%m')] ~ '&type=' ~ cfdiTypeURL[cfdi.TipoDeComprobante] ~ '&state=all' }}"
+                                                        target="_blank">
+                                                        {{ cfdi.UUID }}
+                                                    </a>
+                                                </td>
+                                                <td>{{ cfdi.RfcReceptor }}</td>
+                                                <td>{{ "${:,.2f}".format(cfdi.Total) }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </section>
+                                {% if user is defined %} {% if
+                                cfdis_pue_with_payments_issued|length > 10 %}
+                                <table>
+                                    <tr>
+                                        <td style="padding: 3px 0 0 10px">
+                                            <p>
+                                                Estos son los 10 registros más recientes encontrados;
+                                                haz clic en
+                                                <a class="button" href={{ errors_pue_issued_link }}>Ver más</a>
+                                                para ir al listado completo.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                {% endif %}
+                                <br /><br /><br />
+                                {% endif %} {% else %}
+                                <p>No hay CFDIs emitidos PUE con pagos relacionados</p>
+                                <br /><br /><br />
+                                {% endif %} {% endif %} {% if cfdis_pue_with_payments_received
+                                is defined %}
+                                <h1>CFDIs PUE Recibidos con pagos relacionados</h1>
+                                {% if cfdis_pue_with_payments_received %}
+                                <section>
+                                    <table class="cfdi-table">
+                                        <thead>
+                                            <tr class="cfdi-table-row">
+                                                <th>Fecha Emisión</th>
+                                                <th>Folio</th>
+                                                <th>Serie</th>
+                                                <th>UUID</th>
+                                                <th>RFC Emisor</th>
+                                                <th>Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for cfdi in cfdis_pue_with_payments_received %}
+                                            <tr class="cfdi-table-row">
+                                                <td>{{ cfdi.Fecha.strftime("%d-%m-%Y") }}</td>
+                                                <td>{{cfdi.Folio or ""}}</td>
+                                                <td>{{cfdi.Serie or ""}}</td>
+                                                <td>
+                                                    <a href="{{ app_url ~ '/cfdi-received?cid=' ~ company.identifier ~ '&search=' ~ cfdi.UUID ~ '&period=' ~ (cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%Y') ~ '-' ~ months[(cfdi.PaymentDate if cfdi.TipoDeComprobante in ['N', 'P'] else cfdi.Fecha).strftime('%m')] ~ '&type=' ~ cfdiTypeURL[cfdi.TipoDeComprobante] ~ '&state=all' }}"
+                                                        target="_blank">
+                                                        {{ cfdi.UUID }}
+                                                    </a>
+                                                </td>
+                                                <td>{{ cfdi.RfcEmisor }}</td>
+                                                <td>{{ "${:,.2f}".format(cfdi.Total) }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </section>
+                                {% if user is defined %} {% if
+                                cfdis_pue_with_payments_received|length > 10 %}
+                                <table>
+                                    <tr>
+                                        <td style="padding: 3px 0 0 10px">
+                                            <p>
+                                                Estos son los 10 registros más recientes encontrados;
+                                                haz clic en
+                                                <a class="button" href={{ errors_pue_received_link }}>Ver más</a>
+                                                para ir al listado completo.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                {% endif %}
+                                <br /><br /><br />
+                                {% endif %} {% else %}
+                                <p>No hay CFDIs recibidos PUE con pagos relacionados</p>
+                                <br /><br /><br />
+                                {% endif %} {% endif %}
+
+                                <section style="padding: 15px 0 10px 0;">
+                                    <table width="100%">
+                                        <tr>
+                                            <td align="center">
+                                                <a href="{{ app_url ~ '/?cid=' ~ company.identifier }}" target="_blank"
+                                                    style='{{"text-decoration: none !important;
+                                                           color: #fff;
+                                                           background-color:" ~ ("#009dff" if is_siigo else "#0070b3") ~ ";
+                                                           padding: 10px;
+                                                           border-radius: 5px;"}}'>
+                                                    Ingresar a {{app_name}}
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </section>
+
+                                <p>
+                                    <b>Nota:</b> este mensaje lo recibes porque tu correo está
+                                    incluido en las Notificaciones que {{app_name}}® envía; si este
+                                    correo no es para ti o deseas ya no recibirlo, ponte en
+                                    contacto con el administrador de {{app_name}}®.
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td align="center" id="mail-content-footer">
+                            <table>
+                                <tr>
+                                    <td align="center">
+                                        <p>¡Estamos aquí para ayudar!</p>
+                                        <p>
+                                            Si tienes alguna pregunta, ponte en contacto con
+                                            nosotros a través de
+                                            {% if is_siigo %}
+                                            <a href={{support_url}}>{{support_url}}</a>
+                                            {% else %}
+                                            <a style="text-decoration: none; color: black">{{support_url}}</a>
+                                            {% endif %}
+                                        </p>
+                                    </td>
+                                </tr>
+                                {% if not is_siigo %}
+                                <tr>
+                                    <td align="center">
+                                        <table style="border-spacing: 10px">
+                                            <tr>
+                                                <td>
+                                                    <a href="https://app.ezaudita.com" style="
+                                    color: rgb(50, 112, 179);
+                                    font-weight: 600;
+                                    text-decoration: none !important;
+                                ">ezaudita.com</a>
+                                                </td>
+                                                <td>
+                                                    <a href="https://www.facebook.com/ezaudita" style="
+                                    color: rgb(50, 112, 179);
+                                    font-weight: 600;
+                                    text-decoration: none !important;
+                                ">facebook/ezaudita</a>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- SIIGO FOOTER -->
+                    {% if is_siigo %}
+                    <tr>
+                        <td>
+                            <div style="text-align: center;">
+                                <div style="padding-left: 30px; padding-top: 10px">
+                                    <div
+                                        style="font-weight: 400; font-size: 12px; line-height: 18px; letter-spacing: 0px; color: #A4A4A4">
+                                        <p>
+                                            Esta es una notificación automática, por favor no respondas este mensaje.
+                                        </p>
+                                        <p>
+                                            Siigo nunca le solicitará datos financieros como usuarios, claves, números
+                                            de
+                                            tarjetas de crédito
+                                            con sus códigos de seguridad y fechas de vencimiento mediante vínculos de
+                                            correo
+                                            electrónico o
+                                            llamadas telefónicas.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>
+                            <table
+                                style="padding: 30px; background-color: #F6F6F6; border: 0; font-size: 12px; line-height: 18px; letter-spacing: 0px; width: 100%;">
+                                <tr>
+                                    <td style="font-weight: 700; padding: 0;"></td>
+                                    <td rowspan="3" width="30">
+                                        <a target="_blank" style="text-decoration: none;"
+                                            href="https://www.youtube.com/user/ConexionAspel/">
+                                            <img src="https://cdnqamicrofrontends.azureedge.net/assets/images/social_networks/youtube.png"
+                                                alt="Youtube" style="width: 21px">
+                                        </a>
+                                    </td>
+                                    <td rowspan="3" width="30">
+                                        <a target="_blank" style="text-decoration: none;"
+                                            href="https://www.linkedin.com/company/aspel-de-mexico/">
+                                            <img src="https://cdnqamicrofrontends.azureedge.net/assets/images/social_networks/linkedin.png"
+                                                alt="Linkedin" style="width: 16px">
+                                        </a>
+                                    </td>
+                                    <td rowspan="3" width="30">
+                                        <a target="_blank" style="text-decoration: none;"
+                                            href="https://www.facebook.com/SiigoAspel/">
+                                            <img src="https://cdnqamicrofrontends.azureedge.net/assets/images/social_networks/facebook.png"
+                                                alt="Facebook" style="width: 12px; height: 20px">
+                                        </a>
+                                    </td>
+                                    <td rowspan="3" width="30">
+                                        <a target="_blank" style="text-decoration: none;"
+                                            href="https://x.com/SiigoAspel/">
+                                            <img src="https://cdnqamicrofrontends.azureedge.net/assets/images/social_networks/x.png"
+                                                alt="x" style="width: 16px">
+                                        </a>
+                                    </td>
+                                    <td rowspan="3" width="30">
+                                        <a target="_blank" style="text-decoration: none;"
+                                            href="https://www.instagram.com/siigoaspel/">
+                                            <img src="https://cdnqamicrofrontends.azureedge.net/assets/images/social_networks/instagram.png"
+                                                alt="Instagram" style="width: 16px">
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {% endif %}
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

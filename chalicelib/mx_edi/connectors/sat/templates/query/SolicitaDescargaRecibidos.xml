@@ -1,0 +1,3 @@
+<des:SolicitaDescargaRecibidos>
+  <des:solicitud{complemento} EstadoComprobante="{estado_comprobante}" FechaFinal="{end}" FechaInicial="{start}"{rfc_a_cuenta_terceros} RfcReceptor="{rfc_solicitante}"{tipo_comprobante} TipoSolicitud="{request_type}">{signature}</des:solicitud>
+</des:SolicitaDescargaRecibidos>

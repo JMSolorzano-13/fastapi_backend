@@ -1,0 +1,3 @@
+<des:SolicitaDescarga>
+  <des:solicitud FechaFinal="{end}" FechaInicial="{start}" {rfc_issued} RfcSolicitante="{rfc}" TipoSolicitud="{request_type}">{rfc_received}{signature}</des:solicitud>
+</des:SolicitaDescarga>

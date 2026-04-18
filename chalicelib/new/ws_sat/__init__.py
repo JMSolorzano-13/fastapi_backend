@@ -1,0 +1,1 @@
+from chalicelib.new.ws_sat.manual_request_verifier import ManualRequestVerifier
