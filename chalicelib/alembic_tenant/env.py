@@ -108,6 +108,7 @@ def _run_migration_for_schema_with_connection(connection, schema: str):
     except Exception as e:
         elapsed = time.time() - start_time
         logger.error(f"Schema '{schema}': Migration failed after {elapsed:.2f}s: {e}")
+        raise
 
 
 def only_schema(schema):

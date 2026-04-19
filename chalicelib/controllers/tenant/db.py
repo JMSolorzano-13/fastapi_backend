@@ -45,7 +45,8 @@ def create_tenant_database_and_schema(company: Company):
         if "database does not exist" in str(e):
             admin_url = tenant_db_url.replace(f"/{company.tenant_db_name}", "/postgres")
             _create_schema(admin_url, schema_name)
-            pass
+        else:
+            raise
 
     # Apply alembic migrations
     _apply_tenant_migrations(schema_name)
