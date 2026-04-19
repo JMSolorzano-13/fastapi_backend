@@ -11,6 +11,9 @@ Env:
   ``AZURE_SERVICEBUS_LISTEN_CONNECTION_STRING`` — preferred listen SAS.
   ``AZURE_SERVICEBUS_CONNECTION_STRING`` — fallback.
   ``FASTAPI_SB_WORKER_ECHO`` — ``1`` echo+complete; ``0`` calls ``dispatch_payload`` (stub).
+  ``FASTAPI_SB_WORKER_EXCLUDE_QUEUES`` — optional comma-separated queue names **not** to subscribe
+  (hyphen or underscore); use e.g. ``queue-create-query`` so echo mode does not **complete** SAT
+  create-query messages before ``go-worker`` processes them.
 """
 
 from __future__ import annotations
@@ -78,8 +81,18 @@ def _queues_from_sqs_env() -> list[str]:
 def _resolve_queue_names() -> list[str]:
     explicit = _explicit_queue_names()
     if explicit:
-        return explicit
-    return _queues_from_sqs_env()
+        names = explicit
+    else:
+        names = _queues_from_sqs_env()
+    return _apply_exclude_queues(names)
+
+
+def _apply_exclude_queues(names: list[str]) -> list[str]:
+    raw = (os.environ.get("FASTAPI_SB_WORKER_EXCLUDE_QUEUES") or "").strip()
+    if not raw:
+        return names
+    deny = {q.strip().replace("_", "-") for q in raw.split(",") if q.strip()}
+    return [n for n in names if n not in deny]
 
 
 def dispatch_payload(queue_name: str, body: str) -> None:
@@ -98,6 +111,9 @@ def _run() -> None:
 
     conn_str, conn_src = _connection_strings()
     queues = _resolve_queue_names()
+    ex = (os.environ.get("FASTAPI_SB_WORKER_EXCLUDE_QUEUES") or "").strip()
+    if ex:
+        logger.warning("service_bus_worker: FASTAPI_SB_WORKER_EXCLUDE_QUEUES=%r applied", ex)
     if not queues:
         logger.error(
             "No queues to listen: set FASTAPI_SB_WORKER_QUEUE_NAMES (comma-separated) "

@@ -7,9 +7,12 @@ Transport: LocalStack SQS (boto3) when ``AWS_ENDPOINT_URL`` / ``LOCAL_INFRA`` in
 or Azure Service Bus when ``SAT_SCRIPT_TRANSPORT=azure`` (or auto-detect from SB connection strings).
 
 Usage:
-    cd fastapi_backend && poetry run python scripts/sat/generate_sat_requests.py
-    poetry run python scripts/sat/generate_sat_requests.py --company-identifier <uuid> \\
-        --start 2024-01-01 --end 2024-06-01 --yes
+    cd fastapi_backend && poetry run python -m scripts.sat.generate_sat_requests --help
+    poetry run python -m scripts.sat.generate_sat_requests --company-identifier <uuid> \\
+        --start 2024-01-01 --end 2024-03-31 --yes --cfdi-only
+    # Azure from laptop: set ``CLOUD_PROVIDER=azure``, Service Bus send string, DB ``DATABASE_URL``/URI
+    # aligned with the deployed API; optional ``SAT_SCRIPT_TRANSPORT=azure``.
+    # Single-message enqueue via Azure CLI: see ``SAT_DOWNLOAD_PIPELINE.md`` (section *Azure CLI — encolar WebService*).
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from uuid import UUID
 
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
@@ -186,6 +190,22 @@ def parse_args():
         action="store_true",
         help="Do not poll tenant sat_query for terminal states after send.",
     )
+    scope = p.add_mutually_exclusive_group()
+    scope.add_argument(
+        "--cfdi-only",
+        action="store_true",
+        help="Enqueue CFDI (ISSUED+RECEIVED) chunks only; skip METADATA.",
+    )
+    scope.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Enqueue METADATA (ISSUED+RECEIVED) chunks only; skip CFDI.",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print plan and exit without sending messages (no SB/SQS calls).",
+    )
     return p.parse_args()
 
 
@@ -207,6 +227,17 @@ def resolve_company(args: argparse.Namespace) -> dict:
     if not company:
         company = next((c for c in companies if c["identifier"] == cid_input), None)
     if not company:
+        if cid_input.isdigit():
+            print(f"Company not found: no row with public.company.id = {cid_input}.")
+            sys.exit(1)
+        try:
+            UUID(cid_input)
+        except ValueError:
+            print(
+                f"Invalid --company-identifier: {cid_input!r} "
+                f"(use a UUID or numeric id from public.company; omit the flag for an interactive list)."
+            )
+            sys.exit(1)
         full = get_company(cid_input)
         if full:
             company = full
@@ -251,21 +282,39 @@ def main() -> None:
         print("Start must be before end.")
         sys.exit(1)
 
-    cfdi_chunks = chunk_dates(start, end, CFDI_CHUNK_DAYS)
-    meta_chunks = chunk_dates(start, end, METADATA_CHUNK_DAYS)
-    total = (len(cfdi_chunks) + len(meta_chunks)) * 2
+    include_cfdi = not args.metadata_only
+    include_metadata = not args.cfdi_only
+
+    cfdi_chunks = chunk_dates(start, end, CFDI_CHUNK_DAYS) if include_cfdi else []
+    meta_chunks = chunk_dates(start, end, METADATA_CHUNK_DAYS) if include_metadata else []
+    total = len(cfdi_chunks) * 2 + len(meta_chunks) * 2
 
     print("\n--- Plan ---")
-    print(f"  CFDI     : {len(cfdi_chunks)} chunks x 2 (ISSUED+RECEIVED) = {len(cfdi_chunks) * 2} requests")
-    print(f"  METADATA : {len(meta_chunks)} chunks x 2 (ISSUED+RECEIVED) = {len(meta_chunks) * 2} requests")
+    if include_cfdi:
+        print(f"  CFDI     : {len(cfdi_chunks)} chunks x 2 (ISSUED+RECEIVED) = {len(cfdi_chunks) * 2} requests")
+    else:
+        print("  CFDI     : (skipped)")
+    if include_metadata:
+        print(f"  METADATA : {len(meta_chunks)} chunks x 2 (ISSUED+RECEIVED) = {len(meta_chunks) * 2} requests")
+    else:
+        print("  METADATA : (skipped)")
     print(f"  Total    : {total} messages -> SQS_CREATE_QUERY / Service Bus peer")
     print(f"  Target   : {envars.SQS_CREATE_QUERY!r}")
+    if args.dry_run:
+        print("\n  --dry-run: no messages sent.")
     print()
 
     for i, (s, e) in enumerate(cfdi_chunks, 1):
         print(f"  CFDI     {i:>3}/{len(cfdi_chunks)}  {s.date()} -> {e.date()}")
     for i, (s, e) in enumerate(meta_chunks, 1):
         print(f"  METADATA {i:>3}/{len(meta_chunks)}  {s.date()} -> {e.date()}")
+
+    if args.dry_run:
+        sys.exit(0)
+
+    if total == 0:
+        print("Nothing to send (empty range or filters removed all chunks).")
+        sys.exit(0)
 
     if not args.yes:
         confirm = input(f"\nSend {total} messages? (yes/no): ").strip().lower()
