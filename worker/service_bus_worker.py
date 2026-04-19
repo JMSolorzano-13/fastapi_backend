@@ -4,8 +4,10 @@ Reads the same ``SQS_*`` environment variables as the API (queue URL or plain na
 Resolves Azure queue names with underscore→hyphen parity vs Go ``QueueNameFromSQSURL``.
 
 Default (``FASTAPI_SB_WORKER_ECHO=1`` or unset): receive, log preview, complete.
-Chalice ``@app.on_sqs_message`` parity is not in this tree; use ``go-worker`` for SAT,
-or ``FASTAPI_SB_WORKER_ECHO=0`` and extend ``dispatch_payload`` when ported.
+Set ``FASTAPI_SB_WORKER_ECHO=0`` to run ``dispatch_payload`` → ``worker.sat_sb_dispatch``:
+create-query, send-metadata, verify, download, process metadata/xml, complete CFDIs, updater
+(same handlers as ``sat_sqs_pipeline`` / local poller). Use ``FASTAPI_SB_WORKER_QUEUE_NAMES`` /
+``FASTAPI_SB_WORKER_EXCLUDE_QUEUES`` to limit which SB queues this process subscribes to.
 
 Env:
   ``AZURE_SERVICEBUS_LISTEN_CONNECTION_STRING`` — preferred listen SAS.
@@ -28,6 +30,7 @@ import time
 from azure.servicebus import ServiceBusClient
 
 from chalicelib.new.shared.infra.queue_transport import queue_name_from_sqs_url
+from worker.sat_sb_dispatch import dispatch_sat_queue_message
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +99,8 @@ def _apply_exclude_queues(names: list[str]) -> list[str]:
 
 
 def dispatch_payload(queue_name: str, body: str) -> None:
-    """Hook for real processing; raises if ``FASTAPI_SB_WORKER_ECHO=0`` and not implemented."""
-    raise NotImplementedError(
-        f"No Python handler for queue={queue_name!r}; use FASTAPI_SB_WORKER_ECHO=1 or go-worker."
-    )
+    """Route Service Bus message body to SAT handlers (extend in ``worker.sat_sb_dispatch``)."""
+    dispatch_sat_queue_message(queue_name, body)
 
 
 def _run() -> None:

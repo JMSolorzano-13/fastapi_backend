@@ -32,7 +32,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--proxy-head
 FROM prod AS dev
 
 # ---------------------------------------------------------------------------
-# Worker — Service Bus consumer (echo mode by default; see worker/service_bus_worker.py)
+# Worker — Service Bus consumer (echo by default; FASTAPI_SB_WORKER_ECHO=0 + queue list → SAT dispatch, see worker/sat_sb_dispatch.py)
 # ---------------------------------------------------------------------------
 FROM base AS prod-worker
 CMD ["python", "-m", "worker.service_bus_worker"]
