@@ -100,6 +100,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Requires Terraform `registry { server + identity }` + AcrPull on the workload UAMI (see `terraform_azure_siigofiscal` compute module).
       - name: Update API Container App
         run: |
           az containerapp update \
