@@ -9,6 +9,19 @@ from chalicelib.schema.models import Company, Permission, User
 Role = Permission.RoleEnum
 
 
+def _coerce_permission_role(value) -> Role:
+    """Normalize ORM / driver values so ``abilities_by_role`` lookup always works.
+
+    Some PostgreSQL + SQLAlchemy combinations return ``permission.role`` as plain
+    ``str``; ``abilities_by_role`` keys are ``Role`` enums — ``dict.get(str)`` would miss.
+    """
+    if isinstance(value, Role):
+        return value
+    if isinstance(value, str):
+        return Role[value.upper()]
+    raise TypeError(f"Unexpected permission.role type: {type(value)!r}")
+
+
 class Ability(enum.Enum):
     UploadCerts = enum.auto()
     SATSync = enum.auto()
@@ -63,7 +76,7 @@ class PermissionController(CommonController):
             .filter(Permission.user_id == user.id, Permission.company_id == company.id)
             .all()
         )
-        return {record[0] for record in records}
+        return {_coerce_permission_role(record[0]) for record in records}
 
     @classmethod
     def get_abilities(cls, user: User, company: Company, *, session: Session) -> set[Ability]:

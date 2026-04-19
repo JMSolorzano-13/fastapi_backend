@@ -108,6 +108,9 @@ def create(
     out = CompanyController.to_nested_dict(company)
     while len(out) == 1 and isinstance(out[0], list):
         out = out[0]
+    # Persist before returning so a late failure in middleware/teardown cannot leave
+    # the client with HTTP 200 while Postgres rolled back the transaction.
+    session.commit()
     return out
 
 
