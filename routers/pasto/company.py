@@ -21,6 +21,7 @@ from helpers.pasto_common import parse_pasto_webhook
 router = APIRouter(tags=["Pasto Company"])
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def company_webhook(
     body: dict = Body(...),

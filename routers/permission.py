@@ -29,6 +29,7 @@ def search(
     return common.search(json_body, PermissionController, session=session)
 
 
+@router.put("", include_in_schema=False)
 @router.put("/")
 def set_permissions(
     body: dict = Body(...),

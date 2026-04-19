@@ -99,6 +99,7 @@ def auth_challenge(body: dict = Body(...)):
 # ---------------------------------------------------------------------------
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def create(body: dict = Body(...), session: Session = Depends(get_db_session_rw)):
     name = body["name"]
@@ -110,12 +111,14 @@ def create(body: dict = Body(...), session: Session = Depends(get_db_session_rw)
     return UserController.to_nested_dict(user)
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 def get(session: Session = Depends(get_db_session), user: User = Depends(get_current_user)):
     context = {"user": user}
     return UserController.get_info(user, context=context, session=session)
 
 
+@router.put("", include_in_schema=False)
 @router.put("/")
 def update(
     body: dict = Body(...),

@@ -12,6 +12,7 @@ from chalicelib.new.regimen_fiscal import RegimenFiscalRetriever
 router = APIRouter(tags=["RegimenFiscal"])
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 def get_all():
     connection = OdooConnection()

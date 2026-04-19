@@ -21,6 +21,7 @@ from dependencies import get_db_session_rw
 router = APIRouter(tags=["Pasto Worker"])
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def create_worker(
     body: dict = Body(...),

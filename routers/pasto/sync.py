@@ -26,6 +26,7 @@ from dependencies.common import get_search_attrs
 router = APIRouter(tags=["Pasto Sync"])
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def create_sync_request(
     body: dict = Body(...),

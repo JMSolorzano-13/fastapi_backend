@@ -22,6 +22,7 @@ from dependencies import get_db_session_rw
 router = APIRouter(tags=["Pasto ResetLicense"])
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def reset_license(
     body: dict = Body(...),

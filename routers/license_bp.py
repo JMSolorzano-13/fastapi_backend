@@ -41,6 +41,7 @@ from helpers.product_helpers import get_latest_subscription, get_list_of_product
 router = APIRouter(tags=["License"])
 
 
+@router.put("", include_in_schema=False)
 @router.put("/")
 def put(
     body: dict = Body(...),
@@ -155,6 +156,7 @@ def set_source(
     setter.set(user_id, source)
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def get_license_details(
     body: dict = Body(...),

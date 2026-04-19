@@ -73,6 +73,7 @@ def search(
     return common.search(json_body, CompanyController, session=session)
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def create(
     body: dict = Body(...),
@@ -157,6 +158,7 @@ def admin_create(
     return {"company_identifier": company.identifier}
 
 
+@router.put("", include_in_schema=False)
 @router.put("/")
 def update(
     body: dict = Body(...),
@@ -166,6 +168,7 @@ def update(
     return common.update(body, CompanyController, session=session, user=user)
 
 
+@router.delete("", include_in_schema=False)
 @router.delete("/")
 def delete(
     body: dict = Body(...),

@@ -31,6 +31,7 @@ def search(
     return common.search(json_body, WorkspaceController, session=session)
 
 
+@router.post("", include_in_schema=False)
 @router.post("/")
 def create(
     json_body: dict = Depends(get_json_body),
@@ -40,6 +41,7 @@ def create(
     return common.create(json_body, WorkspaceController, session=session, user=user)
 
 
+@router.put("", include_in_schema=False)
 @router.put("/")
 def update(
     body: dict = Body(...),
@@ -49,6 +51,7 @@ def update(
     return common.update(body, WorkspaceController, session=session, user=user)
 
 
+@router.delete("", include_in_schema=False)
 @router.delete("/")
 def delete(
     body: dict = Body(...),
