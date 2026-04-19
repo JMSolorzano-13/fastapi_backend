@@ -2,7 +2,6 @@ import random
 import uuid
 from collections.abc import Callable
 
-import boto3
 import pytest
 from moto import mock_aws
 from pydantic import HttpUrl
@@ -15,6 +14,7 @@ from chalicelib.blueprints.attachment import (
     _create_many,
     _get_download_urls,
 )
+from chalicelib.infra.localstack_boto_clients import make_ephemeral_s3_client
 from chalicelib.new.config.infra import envars
 from chalicelib.schema.models.company import Company
 from chalicelib.schema.models.tenant.cfdi import CFDI
@@ -65,6 +65,6 @@ def attachments(
 @pytest.fixture(autouse=True)
 def s3_filesattach_fixture():
     with mock_aws():
-        client = boto3.client("s3", region_name="us-east-1")
+        client = make_ephemeral_s3_client(region_name="us-east-1")
         client.create_bucket(Bucket=envars.S3_FILESATTACH)
         yield client

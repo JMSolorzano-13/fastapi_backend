@@ -2,13 +2,13 @@ import json
 from collections.abc import Generator
 from contextlib import contextmanager
 
-import boto3
 import pytest
+from app import app
 from boto3_type_annotations.cognito_idp import Client as CognitoClient
 from chalice.test import Client, HTTPResponse, TestHTTPClient
 from moto import mock_aws
 
-from app import app
+from chalicelib.infra.localstack_boto_clients import make_ephemeral_cognito_client
 from chalicelib.new.config.infra import envars
 
 
@@ -61,7 +61,7 @@ def mock_session(mocker, session, commit_session):
 @pytest.fixture()
 def cognito() -> Generator[CognitoClient, None, None]:
     with mock_aws():
-        client = boto3.client("cognito-idp", region_name=envars.REGION_NAME)
+        client = make_ephemeral_cognito_client(region_name=envars.REGION_NAME)
         yield client
 
 

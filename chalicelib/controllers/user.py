@@ -358,13 +358,22 @@ class UserController(CommonController):
     def get_access(cls, user: User, *, session: Session):
         session.add(user)
         allowed_companies = CommonController.get_user_companies(user, session=session)
-        allowed_workspaces = {company.workspace for company in allowed_companies} | set(
-            CommonController.get_owned_by(user, session=session)
-        )
+        owned_workspaces = set(CommonController.get_owned_by(user, session=session))
+        allowed_workspaces = {company.workspace for company in allowed_companies} | owned_workspaces
         companies_by_ws = {
             workspace: {company for company in allowed_companies if company.workspace == workspace}
             for workspace in allowed_workspaces
         }
+        # Owners must see every company in workspaces they own, even when `permission`
+        # rows are missing (avoids empty SPA after company create).
+        for workspace in owned_workspaces:
+            bucket = companies_by_ws.setdefault(workspace, set())
+            for row in (
+                session.query(Company)
+                .filter(Company.workspace_id == workspace.id)
+                .all()
+            ):
+                bucket.add(row)
         companies_by_ws: dict[WorkspaceORM, set[Company]] = companies_by_ws
         return {
             workspace.identifier: {

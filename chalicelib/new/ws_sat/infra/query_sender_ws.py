@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from logging import DEBUG, ERROR, INFO
 
-import boto3
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from chalicelib.boto3_clients import s3_client
 from chalicelib.logger import log
 from chalicelib.modules import Modules
 from chalicelib.mx_edi import connectors
@@ -57,7 +57,7 @@ class QuerySenderWS(WSRepo):
 
         for company_identifier, (wid, cid) in unique_companies.items():
             if not _check_certs_exist(
-                s3_client=boto3.client("s3"), bucket_url=envars.S3_CERTS, wid=wid, cid=cid
+                s3_client=s3_client(), bucket_url=envars.S3_CERTS, wid=wid, cid=cid
             ):
                 companies_with_cert_errors.add(company_identifier)
             else:

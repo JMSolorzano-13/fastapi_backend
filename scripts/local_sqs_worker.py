@@ -12,7 +12,6 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-import boto3
 from dotenv import load_dotenv
 
 for _name in ("boto3", "botocore", "urllib3", "s3transfer"):
@@ -26,8 +25,9 @@ os.environ.setdefault("LOCAL_INFRA", "1")
 load_dotenv(_ROOT / ".env")
 load_dotenv(_ROOT / ".env.local", override=False)
 
-from chalicelib.workers.sat_sqs_pipeline import get_sat_local_poll_dispatchers
-from chalicelib.workers.sqs_lambda_shim import build_lambda_sqs_event_dict
+from chalicelib.infra.localstack_boto_clients import make_ephemeral_sqs_client  # noqa: E402
+from chalicelib.workers.sat_sqs_pipeline import get_sat_local_poll_dispatchers  # noqa: E402
+from chalicelib.workers.sqs_lambda_shim import build_lambda_sqs_event_dict  # noqa: E402
 
 
 class LocalSqsPoller:
@@ -47,8 +47,7 @@ class LocalSqsPoller:
         endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
         region_name = os.environ.get("REGION_NAME", "us-east-1")
 
-        self.sqs_client = boto3.client(
-            "sqs",
+        self.sqs_client = make_ephemeral_sqs_client(
             endpoint_url=endpoint_url,
             region_name=region_name,
             aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "test"),
@@ -175,8 +174,7 @@ def main() -> None:
     endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
 
     try:
-        sqs = boto3.client(
-            "sqs",
+        sqs = make_ephemeral_sqs_client(
             endpoint_url=endpoint_url,
             region_name=os.environ.get("REGION_NAME", "us-east-1"),
             aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "test"),

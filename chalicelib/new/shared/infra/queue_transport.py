@@ -2,7 +2,7 @@
 
 ``scripts/sat/_runtime.py`` and ``SQSHandler`` share this so ACA (queue names + SB
 connection string) matches operator scripts and avoids ``SEND_FAILED`` from passing
-a queue *name* to boto3 as ``QueueUrl``.
+a queue *name* where an HTTPS ``QueueUrl`` is required.
 """
 
 from __future__ import annotations
@@ -59,24 +59,9 @@ def resolve_sqs_queue_url(client: Any, queue_target: str) -> str:
 
 def _boto_sqs_client_for_transport() -> Any:
     """Ephemeral SQS client aligned with ``scripts/sat/_runtime`` (keys + endpoint)."""
-    import boto3
+    from chalicelib.infra import localstack_boto_clients as _ls
 
-    from chalicelib.new.config.infra import envars
-
-    endpoint: str | None = None
-    if os.environ.get("LOCAL_INFRA") == "1":
-        endpoint = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
-    elif os.environ.get("AWS_ENDPOINT_URL"):
-        endpoint = os.environ["AWS_ENDPOINT_URL"]
-    sqs_kwargs: dict[str, Any] = {"region_name": envars.REGION_NAME}
-    if endpoint:
-        sqs_kwargs["endpoint_url"] = endpoint
-    ak = os.environ.get("AWS_ACCESS_KEY_ID")
-    sk = os.environ.get("AWS_SECRET_ACCESS_KEY")
-    if ak and sk:
-        sqs_kwargs["aws_access_key_id"] = ak
-        sqs_kwargs["aws_secret_access_key"] = sk
-    return boto3.client("sqs", **sqs_kwargs)
+    return _ls.make_ephemeral_sqs_client_from_transport_env()
 
 
 def _resolve_default_boto_sqs_client() -> Any:

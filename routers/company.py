@@ -104,8 +104,11 @@ def create(
             CompanyController.publish_company_created_deferred,
             str(company.identifier),
         )
-    # Single-element list matches legacy Chalice + SPA (createCompany typed as Company[]).
-    return [CompanyController.to_nested_dict(company)]
+    # ``to_nested_dict`` is list-shaped (@ensure_list); SPA expects ``Company[]``.
+    out = CompanyController.to_nested_dict(company)
+    while len(out) == 1 and isinstance(out[0], list):
+        out = out[0]
+    return out
 
 
 @router.post("/admin_create")

@@ -16,7 +16,6 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
-import boto3
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -29,7 +28,8 @@ os.environ.setdefault("LOCAL_INFRA", "1")
 load_dotenv(_ROOT / ".env")
 load_dotenv(_ROOT / ".env.local", override=False)
 
-from chalicelib.new.config.infra import envars
+from chalicelib.infra.localstack_boto_clients import make_ephemeral_sqs_client  # noqa: E402
+from chalicelib.new.config.infra import envars  # noqa: E402
 
 
 def _database_url() -> str:
@@ -55,8 +55,7 @@ class LocalSATBatchWorker:
 
         endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
         region_name = os.environ.get("REGION_NAME", "us-east-1")
-        self.sqs = boto3.client(
-            "sqs",
+        self.sqs = make_ephemeral_sqs_client(
             endpoint_url=endpoint_url,
             region_name=region_name,
             aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "test"),

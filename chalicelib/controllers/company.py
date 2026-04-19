@@ -11,7 +11,7 @@ from pycfdi_credentials.private_key import PrivateKey, PrivateKeyException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from chalicelib.boto3_clients import s3_client
+from chalicelib.boto3_clients import s3_client, upload_fileobj_to_object_storage
 from chalicelib.bus import get_global_bus
 from chalicelib.controllers import ensure_list
 from chalicelib.controllers.common import CommonController
@@ -193,22 +193,22 @@ class CompanyController(CommonController):
             )
         certificate = get_certificate_and_validate_private_key(cer, key, password)
         assert_same_rfc_in_new_cer(company.rfc, certificate)
-        s3_client().upload_fileobj(
-            io.BytesIO(cer),
+        upload_fileobj_to_object_storage(
             envars.S3_CERTS,
             _get_route(company.workspace_id, company.id, "cer"),
+            io.BytesIO(cer),
         )
-        s3_client().upload_fileobj(
-            io.BytesIO(key),
+        upload_fileobj_to_object_storage(
             envars.S3_CERTS,
             _get_route(company.workspace_id, company.id, "key"),
+            io.BytesIO(key),
         )
 
         txt_file = io.BytesIO(password.encode())
-        s3_client().upload_fileobj(
-            txt_file,
+        upload_fileobj_to_object_storage(
             envars.S3_CERTS,
             _get_route(company.workspace_id, company.id, "txt"),
+            txt_file,
         )
         is_new = True
         log(

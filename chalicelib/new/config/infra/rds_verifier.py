@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -41,6 +42,8 @@ class RDSVerifier:
         return is_ok
 
     def get_cpu_rds(self):
+        if os.environ.get("CLOUD_PROVIDER", "").lower() == "azure":
+            return 0.0
         now = datetime.utcnow()
         response = cloudwatch_client().get_metric_statistics(
             Namespace="AWS/RDS",

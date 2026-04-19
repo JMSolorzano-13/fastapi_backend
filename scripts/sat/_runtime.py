@@ -1,4 +1,4 @@
-"""Load env and send queue payloads via SQS (boto3) or Azure Service Bus."""
+"""Load env and send queue payloads via SQS (local) or Azure Service Bus."""
 
 from __future__ import annotations
 
@@ -49,16 +49,7 @@ def send_queue_json(queue_target: str, payload: object) -> None:
 
 
 def s3_client_for_scripts():
-    """S3 client aligned with ``chalicelib.boto3_clients`` LocalStack / keys."""
-    import boto3
+    """S3 client aligned with ``chalicelib.boto3_clients`` (LocalStack keys or Azure Blob shim)."""
+    from chalicelib.boto3_clients import s3_client
 
-    from chalicelib.new.config.infra import envars
-
-    kwargs: dict[str, str] = {"region_name": envars.REGION_NAME}
-    if os.environ.get("LOCAL_INFRA") == "1":
-        kwargs["endpoint_url"] = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
-    elif os.environ.get("AWS_ENDPOINT_URL"):
-        kwargs["endpoint_url"] = os.environ["AWS_ENDPOINT_URL"]
-    kwargs["aws_access_key_id"] = envars.S3_ACCESS_KEY
-    kwargs["aws_secret_access_key"] = envars.S3_SECRET_KEY
-    return boto3.client("s3", **kwargs)
+    return s3_client()

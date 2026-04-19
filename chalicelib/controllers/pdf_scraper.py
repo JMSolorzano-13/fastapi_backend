@@ -4,8 +4,6 @@ import io
 import json
 from logging import DEBUG
 
-import boto3
-import botocore
 from sqlalchemy.orm import Session
 
 from chalicelib.boto3_clients import lambda_client_pdf, s3_client, secretsmanager_get
@@ -13,39 +11,10 @@ from chalicelib.bus import get_global_bus
 from chalicelib.logger import log
 from chalicelib.modules import Modules
 from chalicelib.new.cfdi_processor.infra.messages.payload_message import SQSMessagePayload
-from chalicelib.new.config.infra import envars
 from chalicelib.new.shared.domain.event.event_type import EventType
 from chalicelib.schema.models import Company as CompanyORM
 
 DEPLOY_LAMBDA_SCRAPER_DOCUMENT = "deploy-lambda-scraper-document-sat"
-
-# Lazy initialization to avoid import-time boto3 client creation
-_lambda_client = None
-
-
-def get_lambda_client():
-    """Get or create Lambda client with proper configuration."""
-    global _lambda_client
-    if _lambda_client is None:
-        config = botocore.config.Config(
-            read_timeout=900,
-            connect_timeout=900,
-            retries={"max_attempts": 0},
-        )
-        
-        client_kwargs = {
-            "config": config,
-            "region_name": envars.REGION_NAME,
-        }
-        
-        # Add LocalStack endpoint if in local mode
-        if envars.LOCAL_INFRA:
-            endpoint_url = envars.AWS_ENDPOINT_URL if hasattr(envars, 'AWS_ENDPOINT_URL') else "http://localhost:4566"
-            client_kwargs["endpoint_url"] = endpoint_url
-        
-        _lambda_client = boto3.client("lambda", **client_kwargs)
-    
-    return _lambda_client
 
 
 class ScraperController:
