@@ -113,7 +113,9 @@ def create(body: dict = Body(...), session: Session = Depends(get_db_session_rw)
 
 @router.get("", include_in_schema=False)
 @router.get("/")
-def get(session: Session = Depends(get_db_session), user: User = Depends(get_current_user)):
+def get(session: Session = Depends(get_db_session_rw), user: User = Depends(get_current_user_rw)):
+    # Use read-write (primary) session so data is visible immediately after writes
+    # (e.g. company create + permissions) when DB_HOST_RO lags behind the primary.
     context = {"user": user}
     return UserController.get_info(user, context=context, session=session)
 

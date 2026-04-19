@@ -35,11 +35,14 @@ def _repo_root() -> Path:
 
 
 def _load_env() -> None:
+    """Load ``.env`` then ``.env.local`` with override so local Docker values win over tunnel/Azure .env."""
     root = _repo_root()
-    for name in (".env", ".env.local"):
-        p = root / name
-        if p.is_file():
-            load_dotenv(p, override=False)
+    env_p = root / ".env"
+    local_p = root / ".env.local"
+    if env_p.is_file():
+        load_dotenv(env_p, override=False)
+    if local_p.is_file():
+        load_dotenv(local_p, override=True)
     load_dotenv(override=False)
 
 
@@ -95,8 +98,9 @@ def _run_poetry_alembic(args: list[str]) -> None:
 
 
 def main() -> int:
+    root = _repo_root()
     _load_env()
-    os.chdir(_repo_root())
+    os.chdir(root)
 
     missing = [k for k in ("DB_HOST", "DB_NAME", "DB_USER", "DB_PASSWORD") if not os.environ.get(k)]
     if missing:

@@ -2,10 +2,13 @@
 
 import os
 from decimal import Decimal
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+_fastapi_root = Path(__file__).resolve().parent
+load_dotenv(_fastapi_root / ".env")
+load_dotenv(_fastapi_root / ".env.local", override=True)
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import ENCODERS_BY_TYPE

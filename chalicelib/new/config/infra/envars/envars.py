@@ -84,13 +84,23 @@ NOTIFY_ODOO = bool(int(os.environ.get("NOTIFY_ODOO", True)))
 # SES
 SES_MAIL = os.environ["SES_MAIL"]
 
-# Auth: Cognito IDP (default) vs local JWT POC (no Cognito at runtime)
-_AUTH_BACKEND_RAW = os.environ.get("AUTH_BACKEND", "cognito").strip().lower()
+# Auth: Cognito IDP (default) vs local JWT POC (no Cognito at runtime).
+# LocalStack free tier does not implement cognito-idp SignUp; mock pool IDs are placeholders.
+# When LOCAL_INFRA=1 and AUTH_BACKEND is unset/empty, default to local_jwt (Azure keeps LOCAL_INFRA=0 → cognito).
+_env_auth_backend = os.environ.get("AUTH_BACKEND")
+if _env_auth_backend is not None and str(_env_auth_backend).strip() != "":
+    _AUTH_BACKEND_RAW = str(_env_auth_backend).strip().lower()
+else:
+    _AUTH_BACKEND_RAW = "local_jwt" if LOCAL_INFRA else "cognito"
 if _AUTH_BACKEND_RAW not in ("cognito", "local_jwt"):
     raise ValueError(
         f"AUTH_BACKEND must be 'cognito' or 'local_jwt', got {_AUTH_BACKEND_RAW!r}"
     )
 AUTH_BACKEND = _AUTH_BACKEND_RAW
+# Single local rule: Docker stack (LOCAL_INFRA=1) never uses Cognito SignUp/IDP against LocalStack.
+# Azure/ACA sets LOCAL_INFRA=0 — auth mode follows AUTH_BACKEND / secrets unchanged.
+if LOCAL_INFRA:
+    AUTH_BACKEND = "local_jwt"
 
 if AUTH_BACKEND == "local_jwt" and not LOCAL_INFRA and not os.environ.get("JWT_SECRET", "").strip():
     raise ValueError(

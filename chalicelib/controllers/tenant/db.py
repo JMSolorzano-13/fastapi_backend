@@ -1,9 +1,15 @@
+import os
+import sys
+
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 
 from chalicelib.schema.models.company import Company
+
+_FA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_TENANT_ALEMBIC_INI = os.path.join(_FA_ROOT, "chalicelib", "alembic_tenant.ini")
 
 
 def create_tenant_database_and_schema(company: Company):
@@ -63,11 +69,10 @@ def _create_schema(admin_url: str, schema_name: str):
 
 def _apply_tenant_migrations(schema_name: str):
     """Apply alembic tenant migrations to the database."""
-    # Load configuration from .ini file
-    alembic_cfg = Config("chalicelib/alembic_tenant.ini")
-
-    # Pass the URL through configuration instead of environment variable
+    if _FA_ROOT not in sys.path:
+        sys.path.insert(0, _FA_ROOT)
+    if not os.path.isfile(_TENANT_ALEMBIC_INI):
+        raise FileNotFoundError(f"Alembic tenant config not found: {_TENANT_ALEMBIC_INI}")
+    alembic_cfg = Config(_TENANT_ALEMBIC_INI)
     alembic_cfg.set_main_option("TENANT_SCHEMAS", schema_name)
-
-    # Execute the upgrade
     command.upgrade(alembic_cfg, "head")
