@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Run public-schema Alembic migrations against the DB in the current environment.
-# Usage (from repo root in container or CI): ./scripts/azure_alembic_upgrade.sh
-# Requires: DB_* env vars (or .env) and network path to PostgreSQL.
+# Same logic as local ``start-local-fastapi.sh`` (hybrid Go stamp + ``upgrade head``).
+# Usage: from ``fastapi_backend/``: ``./scripts/azure_alembic_upgrade.sh``
+# Requires: ``DB_*`` in the environment (or ``.env``) and a full app ``.env`` so Alembic can import settings.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-exec alembic -c chalicelib/alembic.ini upgrade head
+export PYTHONPATH="${PWD}${PYTHONPATH:+:${PYTHONPATH}}"
+exec poetry run python scripts/init_public_database.py

@@ -1,4 +1,5 @@
 from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy.inspection import inspect
 
 from .model import Model
 
@@ -19,6 +20,11 @@ class User(Model):
         String,
         index=True,
         unique=True,
+    )
+    # Bcrypt hash for AUTH_BACKEND=local_jwt (matches public.user.password_hash in control DDL)
+    password_hash = Column(
+        String,
+        nullable=True,
     )
     invited_by_id = Column(
         Integer,
@@ -41,3 +47,10 @@ class User(Model):
     stripe_subscription_identifier = Column(
         String,
     )
+
+    def __iter__(self):
+        """Omit ``password_hash`` from ``dict(user)`` / API serialization."""
+        for c in inspect(self).mapper.column_attrs:
+            if c.key == "password_hash":
+                continue
+            yield c.key, getattr(self, c.key)

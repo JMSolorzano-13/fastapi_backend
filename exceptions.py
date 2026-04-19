@@ -32,6 +32,13 @@ class MethodNotAllowedError(HTTPException):
         super().__init__(status_code=405, detail=str(msg))
 
 
+class NotSupportedForAuthModeError(HTTPException):
+    """OAuth/Cognito-only flows when ``AUTH_BACKEND=local_jwt`` (POC)."""
+
+    def __init__(self, msg: str = "Not supported for this authentication mode"):
+        super().__init__(status_code=501, detail=str(msg))
+
+
 class ChaliceViewError(HTTPException):
     """Maps the old catch-all Chalice error to a 500."""
 

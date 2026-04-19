@@ -1,19 +1,67 @@
 """
-Local Authentication Module for Development
+Local JWT (PyJWT, HS256) for AUTH_BACKEND=local_jwt — no Cognito at runtime.
 
-This module provides JWT token generation and validation for local development
-when Cognito is not available (LocalStack Community Edition limitation).
+Issues Cognito-shaped **AuthenticationResult** keys (IdToken, AccessToken, RefreshToken).
+Validates issuer (**JWT_ISS**), audience (**JWT_AUD**), and **JWT_SECRET** on decode.
 
-SECURITY WARNING: This module should ONLY be used when LOCAL_INFRA=1.
-It bypasses all Cognito security checks and should never be used in production.
+SECURITY: With **LOCAL_INFRA=0** (e.g. Azure ACA), **JWT_SECRET** must be set (**envars**);
+with **LOCAL_INFRA=1**, a dev-only default secret applies if **JWT_SECRET** is unset.
 """
 
-import jwt
-from datetime import datetime, timedelta
+from __future__ import annotations
+
+import os
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-# Local development secret key (NOT FOR PRODUCTION)
+import bcrypt
+import jwt
+
+# Default HS256 secret when JWT_SECRET is unset (LOCAL_INFRA dev only)
 LOCAL_SECRET_KEY = "local-dev-secret-key-do-not-use-in-production-this-is-only-for-testing"
+
+# Access / ID token lifetime (seconds); Cognito-shaped ExpiresIn
+_DEFAULT_EXPIRES_IN = 86400
+_REFRESH_DAYS = 30
+
+
+def _jwt_secret() -> str:
+    return os.environ.get("JWT_SECRET", LOCAL_SECRET_KEY)
+
+
+def _jwt_iss() -> str:
+    return os.environ.get("JWT_ISS", "http://localhost:4566")
+
+
+def _jwt_aud() -> str:
+    return os.environ.get("JWT_AUD", "local_mock_client")
+
+
+def _now_ts() -> int:
+    return int(datetime.now(UTC).timestamp())
+
+
+def _encode_hs256(payload: dict[str, Any]) -> str:
+    return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
+
+
+def hash_password(plain_password: str) -> str:
+    """Hash a password with bcrypt for storage in ``user.password_hash``."""
+    pw = plain_password.encode("utf-8")
+    return bcrypt.hashpw(pw, bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain_password: str, password_hash: str) -> bool:
+    """Verify a plaintext password against a bcrypt hash string."""
+    if not password_hash:
+        return False
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"),
+            password_hash.encode("utf-8"),
+        )
+    except ValueError:
+        return False
 
 
 def create_local_jwt(
@@ -22,80 +70,92 @@ def create_local_jwt(
     expires_in_hours: int = 24,
 ) -> str:
     """
-    Create a JWT token for local development.
+    Create a single ID-shaped JWT (legacy helper; prefer ``issue_authentication_result``).
 
-    Args:
-        email: User email address
-        cognito_sub: Cognito subject (user identifier)
-        expires_in_hours: Token expiration time in hours
-
-    Returns:
-        JWT token string
-
-    Example:
-        token = create_local_jwt("dev@local.test", "local-user-123")
+    Claims: **sub**, **email**, **exp**, **iat**, and **iss** / **aud** / **token_use**.
     """
-    now = datetime.utcnow()
+    now = _now_ts()
+    exp = now + int(timedelta(hours=expires_in_hours).total_seconds())
     payload = {
         "sub": cognito_sub,
-        "name": email,
         "email": email,
-        "aud": "local_mock_client",
-        "iss": "http://localhost:4566",
-        "exp": now + timedelta(hours=expires_in_hours),
+        "iss": _jwt_iss(),
+        "aud": _jwt_aud(),
         "iat": now,
+        "exp": exp,
         "token_use": "id",
-        "auth_time": int(now.timestamp()),
     }
-    return jwt.encode(payload, LOCAL_SECRET_KEY, algorithm="HS256")
+    return _encode_hs256(payload)
 
 
 def decode_local_jwt(token: str, verify_signature: bool = True) -> dict[str, Any]:
     """
-    Decode a local JWT token.
+    Decode and validate an **access** or **id** token (API ``access_token`` header).
+
+    Rejects **refresh** tokens so they cannot be used as session tokens.
 
     Args:
-        token: JWT token string
-        verify_signature: Whether to verify the signature (default: True)
+        token: JWT string
+        verify_signature: If False, decode only (not used in production paths)
 
     Returns:
-        Decoded token payload
+        Decoded payload
 
     Raises:
-        jwt.ExpiredSignatureError: If token is expired
-        jwt.InvalidTokenError: If token is invalid
+        jwt.PyJWTError: Invalid or expired token
     """
-    options = {
-        "verify_signature": verify_signature,
-        "verify_exp": True,
-        "verify_aud": False,  # Don't verify audience for local tokens
-    }
+    if not verify_signature:
+        decoded = jwt.decode(
+            token,
+            options={
+                "verify_signature": False,
+                "verify_exp": False,
+                "verify_aud": False,
+            },
+        )
+    else:
+        decoded = jwt.decode(
+            token,
+            _jwt_secret(),
+            algorithms=["HS256"],
+            audience=_jwt_aud(),
+            issuer=_jwt_iss(),
+            options={
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_aud": True,
+            },
+        )
+    tu = decoded.get("token_use")
+    if tu not in ("id", "access"):
+        raise jwt.InvalidTokenError("Expected id or access token")
+    if "sub" not in decoded:
+        raise jwt.InvalidTokenError("Missing sub claim")
+    if verify_signature and "email" not in decoded:
+        raise jwt.InvalidTokenError("Missing email claim")
+    return decoded
 
-    return jwt.decode(
+
+def decode_refresh_token(token: str) -> dict[str, Any]:
+    """Validate a refresh JWT issued by ``issue_authentication_result``."""
+    payload = jwt.decode(
         token,
-        LOCAL_SECRET_KEY,
+        _jwt_secret(),
         algorithms=["HS256"],
-        options=options,
+        audience=_jwt_aud(),
+        issuer=_jwt_iss(),
+        options={"verify_signature": True, "verify_exp": True, "verify_aud": True},
     )
+    if payload.get("token_use") != "refresh":
+        raise jwt.InvalidTokenError("Not a refresh token")
+    if "sub" not in payload:
+        raise jwt.InvalidTokenError("Missing sub claim")
+    return payload
 
 
 def decode_token_without_verification(token: str) -> dict[str, Any]:
     """
-    Decode any JWT token without signature verification.
-
-    This is useful for extracting claims from tokens generated elsewhere
-    (e.g., from a dev/staging Cognito instance) without needing to validate them.
-
-    Args:
-        token: JWT token string
-
-    Returns:
-        Decoded token payload
-
-    Example:
-        payload = decode_token_without_verification(real_cognito_token)
-        email = payload["email"]
-        cognito_sub = payload["sub"]
+    Decode any JWT without signature verification (dev / introspection only).
     """
     return jwt.decode(
         token,
@@ -103,29 +163,62 @@ def decode_token_without_verification(token: str) -> dict[str, Any]:
     )
 
 
-def create_mock_user_tokens(email: str) -> dict[str, str]:
+def issue_authentication_result(email: str, cognito_sub: str) -> dict[str, Any]:
     """
-    Create a complete set of mock tokens for a user.
+    Build a Cognito-shaped AuthenticationResult for the frontend (PascalCase keys).
 
-    Args:
-        email: User email address
-
-    Returns:
-        Dictionary with idToken, accessToken, and refreshToken
-
-    Example:
-        tokens = create_mock_user_tokens("dev@local.test")
-        id_token = tokens["idToken"]
+    Id/Access: **sub**, **email**, **exp**, **iat**, **iss**, **aud**, **token_use**.
+    Refresh: **sub**, **exp**, **iat**, **iss**, **aud**, **token_use** (no **email**).
     """
-    # Use email as cognito_sub for simplicity in local dev
-    cognito_sub = f"local-{email.replace('@', '-').replace('.', '-')}"
+    now = _now_ts()
+    exp_access = now + _DEFAULT_EXPIRES_IN
+    exp_refresh = now + int(timedelta(days=_REFRESH_DAYS).total_seconds())
+    iss = _jwt_iss()
+    aud = _jwt_aud()
 
-    id_token = create_local_jwt(email, cognito_sub)
+    def _id_access_claims(token_use: str) -> dict[str, Any]:
+        return {
+            "sub": cognito_sub,
+            "email": email,
+            "iss": iss,
+            "aud": aud,
+            "iat": now,
+            "exp": exp_access,
+            "token_use": token_use,
+        }
+
+    id_token = _encode_hs256(_id_access_claims("id"))
+    access_token = _encode_hs256(_id_access_claims("access"))
+    refresh_token = _encode_hs256(
+        {
+            "sub": cognito_sub,
+            "iss": iss,
+            "aud": aud,
+            "iat": now,
+            "exp": exp_refresh,
+            "token_use": "refresh",
+        }
+    )
 
     return {
-        "idToken": id_token,
-        "accessToken": id_token,  # Same token for simplicity
-        "refreshToken": f"mock-refresh-{cognito_sub}",
-        "expiresIn": 86400,  # 24 hours in seconds
-        "tokenType": "Bearer",
+        "AccessToken": access_token,
+        "ExpiresIn": _DEFAULT_EXPIRES_IN,
+        "TokenType": "Bearer",
+        "RefreshToken": refresh_token,
+        "IdToken": id_token,
+    }
+
+
+def create_mock_user_tokens(email: str) -> dict[str, str]:
+    """
+    Create mock tokens for dev routes (camelCase keys).
+    """
+    cognito_sub = f"local-{email.replace('@', '-').replace('.', '-')}"
+    ar = issue_authentication_result(email, cognito_sub)
+    return {
+        "idToken": ar["IdToken"],
+        "accessToken": ar["AccessToken"],
+        "refreshToken": ar["RefreshToken"],
+        "expiresIn": ar["ExpiresIn"],
+        "tokenType": ar["TokenType"],
     }

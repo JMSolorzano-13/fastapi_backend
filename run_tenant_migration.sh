@@ -1,6 +1,6 @@
 #!/bin/bash
-# Helper script to run tenant migrations from the Go backend
-# Usage: ./run_tenant_migration.sh <schema_name>
+# Apply Alembic tenant migrations for one company UUID schema.
+# Usage: ./run_tenant_migration.sh <company_identifier_uuid>
 
 set -e
 

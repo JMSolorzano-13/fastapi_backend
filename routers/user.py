@@ -32,7 +32,7 @@ from dependencies import (
     get_user_identifier,
     get_user_identifier_rw,
 )
-from exceptions import BadRequestError, NotFoundError
+from exceptions import BadRequestError, NotFoundError, NotSupportedForAuthModeError
 
 router = APIRouter(tags=["User"])
 
@@ -43,7 +43,7 @@ router = APIRouter(tags=["User"])
 
 
 @router.post("/auth")
-def auth(body: dict = Body(...)):
+def auth(body: dict = Body(...), session: Session = Depends(get_db_session)):
     flow = body["flow"]
     params = body["params"]
 
@@ -54,7 +54,7 @@ def auth(body: dict = Body(...)):
         )
 
     try:
-        return UserController.auth(flow, params)
+        return UserController.auth(flow, params, session=session)
     except NeedCognitoChallenge as e:
         return JSONResponse(
             status_code=428,
@@ -72,6 +72,11 @@ def auth_by_code(code: str, session: Session = Depends(get_db_session_rw)):
         return JSONResponse(
             status_code=403,
             content={"state": f"{envars.BLOCK_APP_MESSAGE}"},
+        )
+
+    if envars.AUTH_BACKEND == "local_jwt":
+        raise NotSupportedForAuthModeError(
+            "OAuth callback /auth/{code} is not available when AUTH_BACKEND=local_jwt"
         )
 
     tokens = cognito.exchange_code_for_tokens(code)
@@ -132,11 +137,14 @@ def update(
 def change_password(
     body: dict = Body(...),
     access_token: str = Header(alias="access_token"),
+    session: Session = Depends(get_db_session_rw),
 ):
     email = body["email"]
     current_password = body["current_password"]
     new_password = body["new_password"]
-    return UserController.change_password(email, current_password, new_password, access_token)
+    return UserController.change_password(
+        email, current_password, new_password, access_token, session=session
+    )
 
 
 @router.post("/forgot")

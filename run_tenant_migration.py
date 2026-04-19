@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
-Helper script to run tenant migrations from the Go backend.
-Usage: python3 run_tenant_migration.py <schema_name>
+Apply Alembic migrations for one tenant (UUID) schema in the same DB as ``DB_*``.
+
+Run after ``scripts/init_public_database.py`` when repairing a company schema, or when the
+schema was created without running migrations. Normally company creation runs this via
+``chalicelib/controllers/tenant/db.py``.
+
+Usage (from ``fastapi_backend/``)::
+
+    poetry run python run_tenant_migration.py <company_identifier_uuid>
 """
 import sys
 from alembic import command

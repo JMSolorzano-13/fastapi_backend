@@ -9,7 +9,8 @@ from typing import Any
 from uuid import uuid4
 
 from botocore.exceptions import ClientError
-from chalice import BadRequestError, ForbiddenError, NotFoundError, UnauthorizedError
+from chalice import NotFoundError
+from sqlalchemy import func
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
@@ -25,11 +26,17 @@ from chalicelib.controllers.cognito import decode_token
 from chalicelib.controllers.common import CommonController
 from chalicelib.controllers.permission import PermissionController
 from chalicelib.controllers.workspace import WorkspaceController
-from chalicelib.new.config.infra import envars
+from chalicelib.new.config.infra import envars, local_auth
 from chalicelib.new.config.infra.envars.control import ADMIN_EMAILS
 from chalicelib.new.odoo.infra.odoo_checker_source_name import OdooCheckerSourceName
 from chalicelib.schema.models import Company, Permission, User
 from chalicelib.schema.models import Workspace as WorkspaceORM
+from exceptions import (
+    BadRequestError,
+    ForbiddenError,
+    NotSupportedForAuthModeError,
+    UnauthorizedError,
+)
 
 
 def get_secret_hash(username: str, client_id: str, client_secret: str) -> str:
@@ -99,9 +106,13 @@ class UserController(CommonController):
 
     @classmethod
     def link_to_db_if_needed(cls, token: str, session: Session) -> User:
+        if envars.AUTH_BACKEND == "local_jwt":
+            raise NotSupportedForAuthModeError(
+                "OAuth account linking is not enabled when AUTH_BACKEND=local_jwt"
+            )
         token_data = decode_token(token)
         cognito_sub = token_data["sub"]
-        email = token_data["name"]
+        email = token_data.get("email") or token_data.get("name")
         with contextlib.suppress(NotFoundError):
             return cls.get_by_cognito_sub(cognito_sub, session=session)
 
@@ -126,16 +137,28 @@ class UserController(CommonController):
 
         context = scale_to_super_user()
         if not user:
-            user = cls.create(
-                {
-                    "name": email,
-                    "email": email,
-                    "cognito_sub": uuid.uuid4().hex,  # TODO sg
-                    "phone": "3313603245",  # TODO sg
-                },
-                session=session,
-                context=context,
-            )
+            if envars.AUTH_BACKEND == "local_jwt":
+                user = cls.create(
+                    {
+                        "name": email,
+                        "email": email,
+                        "phone": "3313603245",
+                    },
+                    session=session,
+                    context=context,
+                )
+                user.cognito_sub = str(user.identifier)
+            else:
+                user = cls.create(
+                    {
+                        "name": email,
+                        "email": email,
+                        "cognito_sub": uuid.uuid4().hex,  # TODO sg
+                        "phone": "3313603245",  # TODO sg
+                    },
+                    session=session,
+                    context=context,
+                )
             session.commit()
         context["user"] = user
         if not user.workspace:
@@ -145,6 +168,10 @@ class UserController(CommonController):
 
     @classmethod
     def confirm_forgot(cls, email: str, verification_code: str, new_password: str):
+        if envars.AUTH_BACKEND == "local_jwt":
+            raise NotSupportedForAuthModeError(
+                "confirm_forgot is not implemented for AUTH_BACKEND=local_jwt"
+            )
         try:
             return cognito_client().confirm_forgot_password(
                 ClientId=envars.COGNITO_CLIENT_ID,
@@ -157,6 +184,10 @@ class UserController(CommonController):
 
     @classmethod
     def forgot_login(cls, email: str):
+        if envars.AUTH_BACKEND == "local_jwt":
+            raise NotSupportedForAuthModeError(
+                "forgot_password is not implemented for AUTH_BACKEND=local_jwt"
+            )
         try:
             response = cognito_client().forgot_password(
                 ClientId=envars.COGNITO_CLIENT_ID,
@@ -192,18 +223,32 @@ class UserController(CommonController):
             ).get_source_id_by_name(source_name)
 
         context = scale_to_super_user()
-        cognito_sub = cls._create_cognito_user(email, password)
-        user = super().create(
-            {
-                "name": name,
-                "email": email,
-                "cognito_sub": cognito_sub,
-                "source_name": source_name,
-                "phone": phone,
-            },
-            session=session,
-            context=context,
-        )
+        if envars.AUTH_BACKEND == "local_jwt":
+            user = super().create(
+                {
+                    "name": name,
+                    "email": email,
+                    "password_hash": local_auth.hash_password(password),
+                    "source_name": source_name,
+                    "phone": phone,
+                },
+                session=session,
+                context=context,
+            )
+            user.cognito_sub = str(user.identifier)
+        else:
+            cognito_sub = cls._create_cognito_user(email, password)
+            user = super().create(
+                {
+                    "name": name,
+                    "email": email,
+                    "cognito_sub": cognito_sub,
+                    "source_name": source_name,
+                    "phone": phone,
+                },
+                session=session,
+                context=context,
+            )
         remove_super_user(context)
         context["user"] = user
         session.commit()
@@ -374,6 +419,21 @@ class UserController(CommonController):
         context_user = context.get("user")
         scale_to_super_user(context)
         session.add(context_user)
+        if envars.AUTH_BACKEND == "local_jwt":
+            invite_password = random_password()
+            user = cls.create(
+                {
+                    "name": email,
+                    "email": email,
+                    "invited_by_id": context_user and context_user.id or None,
+                    "password_hash": local_auth.hash_password(invite_password),
+                },
+                session=session,
+                context=context,
+            )
+            user.cognito_sub = str(user.identifier)
+            session.flush()
+            return user
         cognito_sub = _admin_create_or_get_cognito_user(email)
         return cls.create(
             {
@@ -388,6 +448,10 @@ class UserController(CommonController):
 
     @classmethod
     def auth_challenge(cls, challenge_name, challenge_session, email, password) -> dict[str, str]:
+        if envars.AUTH_BACKEND == "local_jwt":
+            raise NotSupportedForAuthModeError(
+                "auth_challenge is not implemented for AUTH_BACKEND=local_jwt"
+            )
         if challenge_name != "NEW_PASSWORD_REQUIRED":
             raise UnauthorizedError(f"Challenge '{challenge_name}' not implemented")
 
@@ -407,16 +471,64 @@ class UserController(CommonController):
             return res["AuthenticationResult"]
 
     @classmethod
-    def auth(cls, flow: str, params: dict[str, str]) -> dict[str, Any]:
+    def auth(
+        cls,
+        flow: str,
+        params: dict[str, str],
+        *,
+        session: Session | None = None,
+    ) -> dict[str, Any]:
         """Authenticate a user.
 
         Args:
-            flow (str): Cognito AuthFlow
+            flow (str): Cognito AuthFlow, or ``USER_PASSWORD_AUTH`` /
+                ``REFRESH_TOKEN_AUTH`` when ``AUTH_BACKEND=local_jwt``.
             params (Dict[str, str]): Cognito params
 
         Returns:
-            Dict[str, Any]: AuthenticationResult from cognito_client().
+            Dict[str, Any]: AuthenticationResult from cognito_client() or local JWT issuer.
         """
+        if envars.AUTH_BACKEND == "local_jwt":
+            if session is None:
+                raise BadRequestError("Database session is required for local JWT authentication")
+            if flow == "USER_PASSWORD_AUTH":
+                email = (params.get("USERNAME") or "").strip().lower()
+                password = params.get("PASSWORD") or ""
+                # USERNAME is lowercased by the client; DB email casing may differ.
+                user = (
+                    session.query(User)
+                    .filter(func.lower(User.email) == email)
+                    .first()
+                )
+                if user is None or not user.password_hash:
+                    raise UnauthorizedError("Invalid credentials")
+                if not local_auth.verify_password(password, user.password_hash):
+                    raise UnauthorizedError("Invalid credentials")
+                if not user.cognito_sub:
+                    raise UnauthorizedError("Invalid credentials")
+                return local_auth.issue_authentication_result(
+                    email=email,
+                    cognito_sub=user.cognito_sub,
+                )
+            if flow == "REFRESH_TOKEN_AUTH":
+                raw = params.get("REFRESH_TOKEN") or ""
+                try:
+                    payload = local_auth.decode_refresh_token(raw)
+                except Exception as e:
+                    raise UnauthorizedError("Invalid refresh token") from e
+                sub = payload.get("sub")
+                if not sub:
+                    raise UnauthorizedError("Invalid refresh token")
+                try:
+                    user = cls.get_by_cognito_sub(sub, session=session)
+                except NotFoundError as e:
+                    raise UnauthorizedError("Invalid refresh token") from e
+                return local_auth.issue_authentication_result(
+                    email=user.email,
+                    cognito_sub=user.cognito_sub,
+                )
+            raise ForbiddenError(f"Auth flow '{flow}' is not supported for AUTH_BACKEND=local_jwt")
+
         if envars.COGNITO_CLIENT_SECRET:
             params["SECRET_HASH"] = get_secret_hash(
                 username=params["USERNAME"],
@@ -436,8 +548,30 @@ class UserController(CommonController):
         return res["AuthenticationResult"]
 
     @classmethod
-    def change_password(cls, email: str, current_password: str, new_password: str, token: str):
+    def change_password(
+        cls,
+        email: str,
+        current_password: str,
+        new_password: str,
+        token: str,
+        *,
+        session: Session | None = None,
+    ):
         """Change the password of a user."""
+        if envars.AUTH_BACKEND == "local_jwt":
+            if session is None:
+                raise BadRequestError("Database session is required for local JWT password change")
+            user = cls.get_by_token(token, session=session)
+            if (email or "").strip().lower() != (user.email or "").strip().lower():
+                raise ForbiddenError("Email does not match authenticated user")
+            if not user.password_hash or not local_auth.verify_password(
+                current_password, user.password_hash
+            ):
+                raise ForbiddenError("Current password is incorrect")
+            user.password_hash = local_auth.hash_password(new_password)
+            session.add(user)
+            session.commit()
+            return {"Status": "SUCCESS"}
         try:
             res = cognito_client().change_password(
                 PreviousPassword=current_password,
@@ -612,6 +746,21 @@ class UserController(CommonController):
         cls, email: str, inviter: User, *, context: dict, session: Session
     ) -> User:
         scale_to_super_user(context)
+        if envars.AUTH_BACKEND == "local_jwt":
+            invite_password = random_password()
+            user = cls.create(
+                {
+                    "name": email,
+                    "email": email,
+                    "invited_by_id": inviter.id,
+                    "password_hash": local_auth.hash_password(invite_password),
+                },
+                session=session,
+                context=context,
+            )
+            user.cognito_sub = str(user.identifier)
+            session.flush()
+            return user
         cognito_sub = _admin_create_or_get_cognito_user(email)
         user = cls.create(
             {

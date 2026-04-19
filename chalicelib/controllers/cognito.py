@@ -5,9 +5,17 @@ from jwt import PyJWKClient
 
 from chalicelib.new.config.infra import envars
 
-# Initialize JWKS client only if not in local mode
-if not envars.LOCAL_INFRA:
-    jwks_url = f"https://cognito-idp.{envars.REGION_NAME}.amazonaws.com/{envars.COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+# JWKS only when validating real Cognito RS256 tokens (not LOCAL_INFRA lax mode, not local_jwt POC)
+_use_cognito_jwks = (
+    not envars.LOCAL_INFRA
+    and envars.AUTH_BACKEND == "cognito"
+    and bool(envars.COGNITO_USER_POOL_ID)
+)
+if _use_cognito_jwks:
+    jwks_url = (
+        f"https://cognito-idp.{envars.REGION_NAME}.amazonaws.com/"
+        f"{envars.COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+    )
     jwks_client = PyJWKClient(jwks_url)
 else:
     jwks_client = None
@@ -39,6 +47,14 @@ def decode_token(id_token: str):
     Raises:
         UnauthorizedError: If token is invalid
     """
+    if envars.AUTH_BACKEND == "local_jwt":
+        from chalicelib.new.config.infra import local_auth
+
+        try:
+            return local_auth.decode_local_jwt(id_token, verify_signature=True)
+        except Exception as e:
+            raise UnauthorizedError(f"Token validation failed: {str(e)}") from e
+
     # Local development mode: skip signature verification
     if envars.LOCAL_INFRA:
         try:
@@ -69,6 +85,11 @@ def exchange_code_for_tokens(code: str):
     """
     Intercambia un código de autorización por tokens de acceso e ID.
     """
+
+    if envars.AUTH_BACKEND == "local_jwt":
+        raise UnauthorizedError(
+            "OAuth authorization code exchange is not enabled when AUTH_BACKEND=local_jwt"
+        )
 
     # url = https://solucioncp-version-sg-sgdev.auth.us-east-1.amazoncognito.com/oauth2/token
     # https://solucioncp-version-sg-sgdev.auth.us-east-1.amazoncognito.com

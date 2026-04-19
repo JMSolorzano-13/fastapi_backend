@@ -23,6 +23,7 @@ from exceptions import (
     ForbiddenError,
     MethodNotAllowedError,
     NotFoundError,
+    NotSupportedForAuthModeError,
     UnauthorizedError,
 )
 from routers import (
@@ -50,7 +51,7 @@ from routers import (
 from routers.pasto import cancel, config, metadata, reset, sync, worker, xml
 from routers.pasto import company as pasto_company
 
-if envars.LOCAL_INFRA:
+if envars.LOCAL_DEV_API:
     from routers import dev_auth
 
 app = FastAPI(
@@ -91,8 +92,12 @@ if envars.LOCAL_INFRA:
     )
 else:
     _cors_raw = (os.environ.get("FASTAPI_CORS_ORIGINS") or "").strip()
-    if _cors_raw:
-        _origins = [x.strip() for x in _cors_raw.split(",") if x.strip()]
+    _origins = [x.strip() for x in _cors_raw.split(",") if x.strip()] if _cors_raw else []
+    # Laptop dev: LOCAL_INFRA=0 but Vite on :5173 — avoid empty CORS (browser shows "CORS error").
+    if not _origins and envars.LOCAL_DEV_API:
+        _fb = (envars.FRONTEND_BASE_URL or "http://localhost:5173").strip().rstrip("/")
+        _origins = list(dict.fromkeys([_fb, "http://localhost:5173", "http://127.0.0.1:5173"]))
+    if _origins:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=_origins,
@@ -114,6 +119,7 @@ _BRIDGE_EXCEPTIONS = (
     ForbiddenError,
     NotFoundError,
     MethodNotAllowedError,
+    NotSupportedForAuthModeError,
     ChaliceViewError,
 )
 
@@ -197,5 +203,5 @@ app.include_router(metadata.router, prefix="/api")
 app.include_router(xml.router, prefix="/api")
 app.include_router(cancel.router, prefix="/api")
 
-if envars.LOCAL_INFRA:
+if envars.LOCAL_DEV_API:
     app.include_router(dev_auth.router, prefix="/api")

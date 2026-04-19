@@ -84,16 +84,38 @@ NOTIFY_ODOO = bool(int(os.environ.get("NOTIFY_ODOO", True)))
 # SES
 SES_MAIL = os.environ["SES_MAIL"]
 
+# Auth: Cognito IDP (default) vs local JWT POC (no Cognito at runtime)
+_AUTH_BACKEND_RAW = os.environ.get("AUTH_BACKEND", "cognito").strip().lower()
+if _AUTH_BACKEND_RAW not in ("cognito", "local_jwt"):
+    raise ValueError(
+        f"AUTH_BACKEND must be 'cognito' or 'local_jwt', got {_AUTH_BACKEND_RAW!r}"
+    )
+AUTH_BACKEND = _AUTH_BACKEND_RAW
+
+if AUTH_BACKEND == "local_jwt" and not LOCAL_INFRA and not os.environ.get("JWT_SECRET", "").strip():
+    raise ValueError(
+        "AUTH_BACKEND=local_jwt requires JWT_SECRET when LOCAL_INFRA=0 "
+        "(configure in Azure Key Vault / ACA secrets)"
+    )
 
 # Cognito
-COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
-COGNITO_CLIENT_ID = os.environ["COGNITO_CLIENT_ID"]
-COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET")
-if COGNITO_CLIENT_SECRET == "N/A":
-    COGNITO_CLIENT_SECRET = None
+if AUTH_BACKEND == "local_jwt":
+    COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
+    COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
+    COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET")
+    if COGNITO_CLIENT_SECRET == "N/A":
+        COGNITO_CLIENT_SECRET = None
+    COGNITO_REDIRECT_URI = os.environ.get("COGNITO_REDIRECT_URI", "http://localhost:5173/callback")
+    COGNITO_URL = os.environ.get("COGNITO_URL", "https://cognito-local-jwt-placeholder.invalid/")
+else:
+    COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
+    COGNITO_CLIENT_ID = os.environ["COGNITO_CLIENT_ID"]
+    COGNITO_CLIENT_SECRET = os.environ.get("COGNITO_CLIENT_SECRET")
+    if COGNITO_CLIENT_SECRET == "N/A":
+        COGNITO_CLIENT_SECRET = None
+    COGNITO_REDIRECT_URI = os.environ.get("COGNITO_REDIRECT_URI", "http://localhost:5173/callback")
+    COGNITO_URL = os.environ["COGNITO_URL"]
 DISPLAY_LOGO_IN_CFDI_PDF = not bool(COGNITO_CLIENT_SECRET)
-COGNITO_REDIRECT_URI = os.environ.get("COGNITO_REDIRECT_URI", "http://localhost:5173/callback")
-COGNITO_URL = os.environ["COGNITO_URL"]
 
 # DB
 DB_HOST = os.environ["DB_HOST"]
@@ -207,6 +229,15 @@ ADD_S3_EXPIRATION_DELTA = timedelta(days=int(os.environ.get("ADD_S3_EXPIRATION_D
 
 # Self
 SELF_ENDPOINT = os.environ["VITE_REACT_APP_BASE_URL"]
+
+# True when the SPA is configured to call an API on this machine (Vite :5173 + FastAPI :8001).
+_VITE_BASE_LOWER = (os.environ.get("VITE_REACT_APP_BASE_URL") or "").lower()
+LOCAL_DEV_API = bool(
+    LOCAL_INFRA
+    or ("localhost" in _VITE_BASE_LOWER)
+    or ("127.0.0.1" in _VITE_BASE_LOWER)
+    or ("[::1]" in _VITE_BASE_LOWER)
+)
 
 # VITE
 VITE_REACT_APP_PRODUCT_TRIAL = os.environ.get("VITE_REACT_APP_PRODUCT_TRIAL")

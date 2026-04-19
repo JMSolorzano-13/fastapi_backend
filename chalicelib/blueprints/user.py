@@ -52,8 +52,8 @@ def create(session: Session):
     return UserController.to_nested_dict(user)
 
 
-@bp.route("/change_password", methods=["POST"], cors=common.cors_config)
-def change_password():
+@bp.route("/change_password", methods=["POST"], cors=common.cors_config, read_only=False)
+def change_password(session: Session):
     token = bp.current_request.headers["access_token"]
     json_body = bp.current_request.json_body or {}
 
@@ -61,11 +61,21 @@ def change_password():
     current_password = json_body["current_password"]
     new_password = json_body["new_password"]
 
-    return UserController.change_password(email, current_password, new_password, token)
+    return UserController.change_password(
+        email, current_password, new_password, token, session=session
+    )
 
 
 @bp.route("/forgot", methods=["POST"], cors=common.cors_config)
 def forgot():
+    if envars.AUTH_BACKEND == "local_jwt":
+        return Response(
+            status_code=501,
+            body={
+                "Code": "NotSupportedForAuthModeError",
+                "Message": "forgot_password is not available when AUTH_BACKEND=local_jwt",
+            },
+        )
     json_body = bp.current_request.json_body or {}
     email = json_body["email"]
     return UserController.forgot_login(email)
@@ -73,6 +83,14 @@ def forgot():
 
 @bp.route("/confirm_forgot", methods=["POST"], cors=common.cors_config)
 def confirm_forgot():
+    if envars.AUTH_BACKEND == "local_jwt":
+        return Response(
+            status_code=501,
+            body={
+                "Code": "NotSupportedForAuthModeError",
+                "Message": "confirm_forgot is not available when AUTH_BACKEND=local_jwt",
+            },
+        )
     json_body = bp.current_request.json_body or {}
     email = json_body["email"]
     verification_code = json_body["verification_code"]
@@ -111,7 +129,7 @@ def super_invite(session: Session, user: User):
 
 
 @bp.route("/auth", methods=["POST"], cors=common.cors_config)
-def auth():
+def auth(session: Session):
     json_body = bp.current_request.json_body or {}
 
     flow = json_body["flow"]
@@ -121,7 +139,7 @@ def auth():
         return Response(status_code=403, body={"state": f"{envars.BLOCK_APP_MESSAGE}"})
 
     try:
-        return UserController.auth(flow, params)
+        return UserController.auth(flow, params, session=session)
     except NeedCognitoChallenge as e:
         return Response(
             status_code=428,
@@ -137,6 +155,15 @@ def auth():
 def auth_by_code(code: str, session: Session):
     if envars.BLOCK_APP_ACCESS:
         return Response(status_code=403, body={"state": f"{envars.BLOCK_APP_MESSAGE}"})
+
+    if envars.AUTH_BACKEND == "local_jwt":
+        return Response(
+            status_code=501,
+            body={
+                "Code": "NotSupportedForAuthModeError",
+                "Message": "OAuth callback is not available when AUTH_BACKEND=local_jwt",
+            },
+        )
 
     tokens = cognito.exchange_code_for_tokens(code)
     id_token = tokens.get("id_token")
@@ -154,6 +181,15 @@ def auth_challenge():
         email (str): The email of the user.
         password (str): The password of the user.
     """
+    if envars.AUTH_BACKEND == "local_jwt":
+        return Response(
+            status_code=501,
+            body={
+                "Code": "NotSupportedForAuthModeError",
+                "Message": "auth_challenge is not available when AUTH_BACKEND=local_jwt",
+            },
+        )
+
     json_body = bp.current_request.json_body or {}
 
     challenge_name = json_body["challenge_name"]

@@ -18,10 +18,12 @@ router = APIRouter(tags=["DevAuth"])
 
 
 def _ensure_local_mode():
-    if not envars.LOCAL_INFRA:
+    """Allow /dev/* when LOCAL_INFRA=1 or API base URL is localhost (same machine as Vite)."""
+    if not envars.LOCAL_DEV_API:
         raise ForbiddenError(
-            "Development auth endpoints are only available when LOCAL_INFRA=1. "
-            "These endpoints are disabled in production for security."
+            "Development auth endpoints are only available for local development "
+            "(LOCAL_INFRA=1 or VITE_REACT_APP_BASE_URL pointing at localhost). "
+            "They are disabled when the API is configured for a remote host."
         )
 
 
