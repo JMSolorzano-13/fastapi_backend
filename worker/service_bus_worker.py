@@ -21,6 +21,7 @@ Env:
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import os
 import signal
@@ -28,6 +29,7 @@ import sys
 import time
 
 from azure.servicebus import ServiceBusClient
+from azure.servicebus.amqp import AmqpMessageBodyType
 
 from chalicelib.new.shared.infra.queue_transport import queue_name_from_sqs_url
 from worker.sat_sb_dispatch import dispatch_sat_queue_message
@@ -98,6 +100,61 @@ def _apply_exclude_queues(names: list[str]) -> list[str]:
     return [n for n in names if n not in deny]
 
 
+def decode_service_bus_received_body(msg: object) -> str:
+    """Turn ``ServiceBusReceivedMessage.body`` into UTF-8 text for SQS-shaped JSON handlers.
+
+    ``azure-servicebus`` 7.12+ returns an **iterator of byte chunks** for DATA bodies (not ``bytes``).
+    Using ``str(msg.body)`` stringifies the generator and breaks ``QueryCreateEvent`` parsing.
+    """
+    try:
+        body_type = msg.body_type  # type: ignore[attr-defined]
+        raw = msg.body  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001
+        return "<read_error>"
+
+    def _join_byte_parts(parts: list[object]) -> str:
+        out = bytearray()
+        for p in parts:
+            if isinstance(p, (bytes, bytearray)):
+                out.extend(p)
+            elif isinstance(p, memoryview):
+                out.extend(p.tobytes())
+            else:
+                out.extend(str(p).encode("utf-8", errors="replace"))
+        return bytes(out).decode("utf-8", errors="replace")
+
+    if body_type == AmqpMessageBodyType.VALUE:
+        if isinstance(raw, (bytes, bytearray)):
+            return bytes(raw).decode("utf-8", errors="replace")
+        if isinstance(raw, memoryview):
+            return raw.tobytes().decode("utf-8", errors="replace")
+        if isinstance(raw, str):
+            return raw
+        return str(raw)
+
+    if body_type == AmqpMessageBodyType.DATA:
+        if isinstance(raw, memoryview):
+            return raw.tobytes().decode("utf-8", errors="replace")
+        if isinstance(raw, (bytes, bytearray)):
+            return bytes(raw).decode("utf-8", errors="replace")
+        if isinstance(raw, (list, tuple)):
+            return _join_byte_parts(list(raw))
+        # Iterable[bytes] (often a generator from AmqpAnnotatedMessage.body)
+        try:
+            return _join_byte_parts(list(raw))
+        except TypeError:
+            return str(raw)
+
+    if body_type == AmqpMessageBodyType.SEQUENCE:
+        try:
+            materialized = list(raw)
+        except TypeError:
+            return str(raw)
+        return json.dumps(materialized, default=str)
+
+    return str(raw)
+
+
 def dispatch_payload(queue_name: str, body: str) -> None:
     """Route Service Bus message body to SAT handlers (extend in ``worker.sat_sb_dispatch``)."""
     dispatch_sat_queue_message(queue_name, body)
@@ -155,20 +212,8 @@ def _run() -> None:
                         continue
                     had_message = True
                     msg = batch[0]
-                    body = ""
                     try:
-                        raw = msg.body
-                        if isinstance(raw, (list, tuple)):
-                            raw = b"".join(
-                                x if isinstance(x, (bytes, bytearray)) else str(x).encode()
-                                for x in raw
-                            )
-                        if isinstance(raw, memoryview):
-                            body = raw.tobytes().decode("utf-8", errors="replace")
-                        elif isinstance(raw, (bytes, bytearray)):
-                            body = bytes(raw).decode("utf-8", errors="replace")
-                        else:
-                            body = str(raw)
+                        body = decode_service_bus_received_body(msg)
                     except Exception:  # noqa: BLE001
                         body = "<decode_error>"
 

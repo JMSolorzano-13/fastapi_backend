@@ -8,6 +8,7 @@
 #   AZURE_ACR_NAME — registry short name only
 #   AZURE_CONTAINER_APP_NAME — FastAPI API Container App name
 #   AZURE_WORKER_CONTAINER_APP_NAME — optional; Python Service Bus worker image. If unset, worker image is still pushed but ACA is not updated.
+#   Worker revision sets FASTAPI_SB_WORKER_ECHO=0 so Service Bus messages run sat_sb_dispatch (CreateQuery, verify, …); omit override in ACA if you need echo-only.
 
 name: Deploy Azure (ACA)
 
@@ -116,4 +117,5 @@ jobs:
             --name "${{ vars.AZURE_WORKER_CONTAINER_APP_NAME }}" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --image "${{ vars.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME_WORKER }}:${{ steps.tag.outputs.value }}" \
+            --set-env-vars "FASTAPI_SB_WORKER_ECHO=0" \
             --output none
