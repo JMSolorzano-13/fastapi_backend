@@ -418,6 +418,10 @@ class CompanyController(CommonController):
         cls.create_database_and_schema(company)
         session.flush()  # Ensure company.id is available for roles creation
         cls.create_first_roles(user, company, session=session, context=context)
+        # Session uses autoflush=False; bulk_insert_mappings from set_permissions is invisible
+        # to the next query until flush. upload_certs (same txn) calls get_abilities → SELECT
+        # permission; without this flush Azure/local would roll back the whole company on Forbidden.
+        session.flush()
         return company
 
     @classmethod
