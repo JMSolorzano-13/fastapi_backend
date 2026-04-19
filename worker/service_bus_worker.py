@@ -21,9 +21,10 @@ import os
 import signal
 import sys
 import time
-from urllib.parse import urlparse
 
 from azure.servicebus import ServiceBusClient
+
+from chalicelib.new.shared.infra.queue_transport import queue_name_from_sqs_url
 
 logger = logging.getLogger(__name__)
 
@@ -40,20 +41,6 @@ SAT_QUEUE_ENV_KEYS: tuple[str, ...] = (
 )
 
 
-def queue_name_from_sqs_url(queue_url: str) -> str:
-    """Mirror ``go_backend/internal/infra/azsbpub.QueueNameFromSQSURL`` (underscores → hyphens)."""
-    raw = (queue_url or "").strip()
-    if not raw:
-        return ""
-    parsed = urlparse(raw)
-    if not parsed.path or parsed.path == "/":
-        name = raw.strip("/")
-    else:
-        segments = [s for s in parsed.path.split("/") if s]
-        name = segments[-1] if segments else ""
-    return name.replace("_", "-")
-
-
 def _connection_strings() -> tuple[str, str]:
     listen = (os.environ.get("AZURE_SERVICEBUS_LISTEN_CONNECTION_STRING") or "").strip()
     primary = (os.environ.get("AZURE_SERVICEBUS_CONNECTION_STRING") or "").strip()
@@ -62,8 +49,7 @@ def _connection_strings() -> tuple[str, str]:
     if primary:
         return primary, "AZURE_SERVICEBUS_CONNECTION_STRING"
     logger.error(
-        "Set AZURE_SERVICEBUS_LISTEN_CONNECTION_STRING "
-        "or AZURE_SERVICEBUS_CONNECTION_STRING"
+        "Set AZURE_SERVICEBUS_LISTEN_CONNECTION_STRING or AZURE_SERVICEBUS_CONNECTION_STRING"
     )
     sys.exit(1)
 
@@ -99,8 +85,7 @@ def _resolve_queue_names() -> list[str]:
 def dispatch_payload(queue_name: str, body: str) -> None:
     """Hook for real processing; raises if ``FASTAPI_SB_WORKER_ECHO=0`` and not implemented."""
     raise NotImplementedError(
-        f"No Python handler for queue={queue_name!r}; "
-        "use FASTAPI_SB_WORKER_ECHO=1 or go-worker."
+        f"No Python handler for queue={queue_name!r}; use FASTAPI_SB_WORKER_ECHO=1 or go-worker."
     )
 
 

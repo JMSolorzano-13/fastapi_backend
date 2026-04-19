@@ -11,7 +11,9 @@ _backend_app = _monorepo_root / "backend" / "app.py"
 if _backend_app.is_file():
     _backend_dir = str(_monorepo_root / "backend")
     if _backend_dir not in sys.path:
-        sys.path.insert(0, _backend_dir)
+        # Append so ``chalicelib`` resolves from ``fastapi_backend/`` first; ``insert(0, …)``
+        # shadowed FastAPI-only modules (e.g. ``queue_transport``) with legacy ``backend/chalicelib``.
+        sys.path.append(_backend_dir)
 
 # Full AWS/DB fixture graph (autouse Cognito/S3/SQS). Skip for lightweight tests
 # (e.g. HTTP parity, golden JSON) via: PYTEST_MINIMAL_CONTEST=1 poetry run pytest …

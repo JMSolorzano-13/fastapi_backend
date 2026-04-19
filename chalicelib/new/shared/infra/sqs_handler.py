@@ -4,18 +4,18 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from chalicelib.boto3_clients import sqs_client
 from chalicelib.logger import DEBUG, ERROR, EXCEPTION, log
 from chalicelib.modules import Modules
 from chalicelib.new.config.infra import envars
 from chalicelib.new.shared.domain.primitives import identifier_default_factory
 from chalicelib.new.shared.infra.message import SQSMessage
 from chalicelib.new.shared.infra.message.sqs_delayed import SQSDelayed
+from chalicelib.new.sqs_local import SQSClientLocal
 
 
 class SQSHandler(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    
+
     queue_url: str
     max_delay: timedelta = envars.sqs.MAX_DELAY
     sqs_client: Any | None = None
@@ -90,7 +90,7 @@ class SQSHandler(BaseModel):
                     execute_at=execute_at,
                 )
                 message_body = delayed_message.model_dump_json()
-                queue_url = envars.sqs.DELAYER
+                queue_url = envars.SQS_SCRAP_DELAYER
 
             if len(message_body) > envars.sqs.MAX_SQS_MESSAGE_SIZE:
                 log(
@@ -104,13 +104,25 @@ class SQSHandler(BaseModel):
                 )
                 return
 
-            # Use local SQS client if set, otherwise use default boto3 client
-            client = self.sqs_client if self.sqs_client is not None else sqs_client()
-            client.send_message(
-                QueueUrl=queue_url,
-                MessageBody=message_body,
-                **(fifo_parameters | delay_parameters),
-            )
+            combined = fifo_parameters | delay_parameters
+            if isinstance(self.sqs_client, SQSClientLocal):
+                self.sqs_client.send_message(
+                    QueueUrl=queue_url,
+                    MessageBody=message_body,
+                    **combined,
+                )
+            else:
+                from chalicelib.new.shared.infra.queue_transport import send_queue_raw
+
+                ds = combined.get("DelaySeconds")
+                send_queue_raw(
+                    queue_url,
+                    message_body,
+                    delay_seconds=int(ds) if ds is not None else None,
+                    message_group_id=combined.get("MessageGroupId"),
+                    message_deduplication_id=combined.get("MessageDeduplicationId"),
+                    boto_sqs_client=self.sqs_client,
+                )
         except Exception as e:
             log(
                 Modules.SQS_HANDLER,

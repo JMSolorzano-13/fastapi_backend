@@ -63,7 +63,7 @@ def create(session: Session, user: User):
 
     populate_company_emails(company, user.email)
 
-    return CompanyController.to_nested_dict(company)
+    return [CompanyController.to_nested_dict(company)]
 
 
 @bp.route("/admin_create", methods=["POST"], cors=common.cors_config, read_only=False)

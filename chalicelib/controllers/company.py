@@ -19,16 +19,19 @@ from chalicelib.controllers.pdf_scraper import ScraperController
 from chalicelib.controllers.permission import Ability, PermissionController, Role
 from chalicelib.controllers.tenant.db import create_tenant_database_and_schema
 from chalicelib.controllers.tenant.session import new_company_session_from_company_identifier
+from chalicelib.controllers.tenant.utils import company_from_identifier
 from chalicelib.controllers.user import UserController
 from chalicelib.controllers.workspace import WorkspaceController
 from chalicelib.exceptions import DocDefaultException
-from chalicelib.logger import DEBUG, WARNING, log
+from chalicelib.logger import DEBUG, EXCEPTION, WARNING, log
 from chalicelib.modules import Modules
 from chalicelib.new.company.infra.company_repository_sa import CompanyRepositorySA
 from chalicelib.new.config.infra import envars
 from chalicelib.new.config.infra.envars.control import ISR_DEFAULT_PERCENTAGE
 from chalicelib.new.shared.domain.event.event import CompanyWithSession
 from chalicelib.new.shared.domain.event.event_type import EventType
+from chalicelib.new.shared.domain.primitives import normalize_identifier
+from chalicelib.new.utils.session import new_session
 from chalicelib.schema.models import Company, Model, User
 from chalicelib.schema.models.workspace import Workspace
 
@@ -283,6 +286,41 @@ class CompanyController(CommonController):
             raise DuplicatedRFCError()
 
     @staticmethod
+    def publish_company_created_deferred(company_identifier: str) -> None:
+        """
+        Run COMPANY_CREATED bus handlers outside the HTTP request thread (Azure / LOCAL_INFRA=0).
+
+        Opens a fresh global session and tenant session so handlers are not tied to the request
+        Session lifecycle. Must run after the creating transaction has committed (e.g. FastAPI
+        BackgroundTasks after dependency teardown).
+        """
+        bus = get_global_bus()
+        try:
+            cid = normalize_identifier(company_identifier)
+            with new_session(comment="publish_company_created_deferred", read_only=True) as session:
+                company = company_from_identifier(cid, session)
+                with new_company_session_from_company_identifier(
+                    company_identifier=company.identifier,
+                    session=session,
+                    read_only=False,
+                ) as company_session:
+                    bus.publish(
+                        EventType.COMPANY_CREATED,
+                        CompanyWithSession(company=company, company_session=company_session),
+                    )
+        except Exception as e:
+            log(
+                Modules.ACCOUNT,
+                EXCEPTION,
+                "COMPANY_CREATED_DEFERRED_FAILED",
+                {
+                    "company_identifier": company_identifier,
+                    "exception": e,
+                },
+            )
+            raise
+
+    @staticmethod
     def create_from_certs(
         workspace_identifier,
         workspace_id,
@@ -292,6 +330,7 @@ class CompanyController(CommonController):
         *,
         session: Session,
         context=None,
+        defer_company_created: bool = False,
     ) -> Company:
         """
         Create a company from the given certificate.
@@ -314,6 +353,9 @@ class CompanyController(CommonController):
             company, cer, key, password, session=session, context=context
         )
         ScraperController.trigger_pdf_scraper(company.identifier, session)
+        if defer_company_created:
+            return company
+
         bus = get_global_bus()
         with new_company_session_from_company_identifier(
             company_identifier=company.identifier,

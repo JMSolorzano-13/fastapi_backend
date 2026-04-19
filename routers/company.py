@@ -6,7 +6,7 @@ Ported from: backend/chalicelib/blueprints/company.py
 
 import base64
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, BackgroundTasks, Body, Depends
 from sqlalchemy.orm import Session
 
 from chalicelib.controllers.company import (
@@ -76,6 +76,7 @@ def search(
 @router.post("", include_in_schema=False)
 @router.post("/")
 def create(
+    background_tasks: BackgroundTasks,
     body: dict = Body(...),
     session: Session = Depends(get_db_session_rw),
     user: User = Depends(get_current_user_rw),
@@ -86,6 +87,7 @@ def create(
     workspace_identifier = body["workspace_identifier"]
     workspace_id = body["workspace_id"]
     context = {"user": user}
+    defer_company_created = not envars.LOCAL_INFRA
     company = CompanyController.create_from_certs(
         workspace_identifier,
         workspace_id,
@@ -94,13 +96,21 @@ def create(
         password,
         context=context,
         session=session,
+        defer_company_created=defer_company_created,
     )
     populate_company_emails(company, user.email)
-    return CompanyController.to_nested_dict(company)
+    if defer_company_created:
+        background_tasks.add_task(
+            CompanyController.publish_company_created_deferred,
+            str(company.identifier),
+        )
+    # Single-element list matches legacy Chalice + SPA (createCompany typed as Company[]).
+    return [CompanyController.to_nested_dict(company)]
 
 
 @router.post("/admin_create")
 def admin_create(
+    background_tasks: BackgroundTasks,
     body: dict = Body(...),
     session: Session = Depends(get_db_session_rw),
     admin_create_user: User = Depends(get_admin_create_user_rw),
@@ -126,6 +136,7 @@ def admin_create(
     if company:
         return {"company_identifier": company.identifier}
 
+    defer_company_created = not envars.LOCAL_INFRA
     company = CompanyController.create_from_certs(
         user.workspace.identifier,
         user.workspace.id,
@@ -134,6 +145,7 @@ def admin_create(
         password,
         context=context,
         session=session,
+        defer_company_created=defer_company_created,
     )
     session.add_all(
         [
@@ -155,6 +167,11 @@ def admin_create(
         session=session,
         initial=True,
     )
+    if defer_company_created:
+        background_tasks.add_task(
+            CompanyController.publish_company_created_deferred,
+            str(company.identifier),
+        )
     return {"company_identifier": company.identifier}
 
 
