@@ -93,14 +93,20 @@ if envars.LOCAL_INFRA:
 else:
     _cors_raw = (os.environ.get("FASTAPI_CORS_ORIGINS") or "").strip()
     _origins = [x.strip() for x in _cors_raw.split(",") if x.strip()] if _cors_raw else []
+    _fb = (envars.FRONTEND_BASE_URL or "").strip().rstrip("/")
+    if _fb and _fb not in _origins:
+        _origins.append(_fb)
     # Laptop dev: LOCAL_INFRA=0 but Vite on :5173 — avoid empty CORS (browser shows "CORS error").
     if not _origins and envars.LOCAL_DEV_API:
-        _fb = (envars.FRONTEND_BASE_URL or "http://localhost:5173").strip().rstrip("/")
-        _origins = list(dict.fromkeys([_fb, "http://localhost:5173", "http://127.0.0.1:5173"]))
-    if _origins:
+        _fb2 = (envars.FRONTEND_BASE_URL or "http://localhost:5173").strip().rstrip("/")
+        _origins = list(dict.fromkeys([_fb2, "http://localhost:5173", "http://127.0.0.1:5173"]))
+    # Optional: SWA preview URLs (e.g. *.azurestaticapps.net) when FASTAPI_CORS_ORIGINS only lists the stable host.
+    _cors_regex = (os.environ.get("FASTAPI_CORS_ORIGIN_REGEX") or "").strip() or None
+    if _origins or _cors_regex:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=_origins,
+            allow_origin_regex=_cors_regex,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
