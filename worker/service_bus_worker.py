@@ -6,8 +6,12 @@ Resolves Azure queue names with underscore→hyphen parity vs Go ``QueueNameFrom
 Default (``FASTAPI_SB_WORKER_ECHO=1`` or unset): receive, log preview, complete.
 Set ``FASTAPI_SB_WORKER_ECHO=0`` to run ``dispatch_payload`` → ``worker.sat_sb_dispatch``:
 create-query, send-metadata, verify, download, process metadata/xml, complete CFDIs, updater
-(same handlers as ``sat_sqs_pipeline`` / local poller). Use ``FASTAPI_SB_WORKER_QUEUE_NAMES`` /
-``FASTAPI_SB_WORKER_EXCLUDE_QUEUES`` to limit which SB queues this process subscribes to.
+(same handlers as ``sat_sqs_pipeline`` / local poller). On non-echo startup, calls
+``chalicelib.bus.suscribe_all_handlers()`` (same as FastAPI ``main.py``) so ``bus.publish`` e.g.
+``SAT_WS_QUERY_SENT`` → ``SQS_VERIFY_QUERY`` via ``SQSHandler`` / ``send_queue_raw``.
+
+Use ``FASTAPI_SB_WORKER_QUEUE_NAMES`` / ``FASTAPI_SB_WORKER_EXCLUDE_QUEUES`` to limit which SB
+queues this process subscribes to.
 
 Env:
   ``AZURE_SERVICEBUS_LISTEN_CONNECTION_STRING`` — preferred listen SAS.
@@ -185,6 +189,14 @@ def _run() -> None:
         echo,
         queues,
     )
+
+    if not echo:
+        from chalicelib.bus import suscribe_all_handlers
+
+        suscribe_all_handlers()
+        logger.warning(
+            "service_bus_worker: suscribe_all_handlers() registered (SAT_WS_QUERY_SENT → verify, …)"
+        )
 
     running = True
 
