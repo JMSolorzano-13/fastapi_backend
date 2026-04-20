@@ -27,10 +27,30 @@ def _apply_aliases(data: dict[str, Any]) -> None:
         data["company_rfc"] = rfc
 
 
+def _company_owning_sat_query(session: Session, company_rows: list[Company], query_uuid: str) -> Company | None:
+    """When several ``Company`` rows share the same RFC, pick the tenant whose ``sat_query`` has this query UUID."""
+    if not query_uuid or not company_rows:
+        return None
+    qid = str(query_uuid).strip()
+    for c in company_rows:
+        schema = str(c.identifier)
+        row = session.execute(
+            text(
+                f'SELECT 1 FROM "{schema}".sat_query '
+                "WHERE identifier = CAST(:qid AS uuid) LIMIT 1"
+            ),
+            {"qid": qid},
+        ).fetchone()
+        if row:
+            return c
+    return None
+
+
 def _load_company_row(session: Session, data: dict[str, Any]) -> Company | None:
     cid_raw = data.get("cid")
     wid_raw = data.get("wid")
     rfc = (data.get("company_rfc") or data.get("rfc") or "").strip()
+    query_uuid = data.get("identifier")
 
     if data.get("company_identifier"):
         q = session.query(Company).filter(
@@ -48,6 +68,8 @@ def _load_company_row(session: Session, data: dict[str, Any]) -> Company | None:
         rows = session.query(Company).filter(Company.rfc == rfc).all()
         if len(rows) == 1:
             return rows[0]
+        if len(rows) > 1:
+            return _company_owning_sat_query(session, rows, str(query_uuid) if query_uuid else "")
     return None
 
 
