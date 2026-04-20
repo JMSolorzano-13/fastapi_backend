@@ -8,11 +8,14 @@ or Azure Service Bus when ``SAT_SCRIPT_TRANSPORT=azure`` (or auto-detect from SB
 
 Usage:
     cd fastapi_backend && poetry run python -m scripts.sat.generate_sat_requests --help
+    poetry run python -m scripts.sat.generate_sat_requests --list-presets
+    poetry run python -m scripts.sat.generate_sat_requests --company-identifier <uuid> \\
+        --preset q1-2024 --yes --dry-run
     poetry run python -m scripts.sat.generate_sat_requests --company-identifier <uuid> \\
         --start 2024-01-01 --end 2024-03-31 --yes --cfdi-only
-    # Azure from laptop: set ``CLOUD_PROVIDER=azure``, Service Bus send string, DB ``DATABASE_URL``/URI
-    # aligned with the deployed API; optional ``SAT_SCRIPT_TRANSPORT=azure``.
-    # Single-message enqueue via Azure CLI: see ``SAT_WEBSERVICE_PIPELINE_FASTAPI.md`` (section *Azure CLI — encolar WebService*).
+    # Azure from laptop: ``LOCAL_INFRA=0``, ``CLOUD_PROVIDER=azure``, Service Bus send SAS
+    # (``AZURE_SERVICEBUS_*``), DB URI aligned with ACA; ``SAT_SCRIPT_TRANSPORT=azure`` if needed.
+    # Queue-only enqueue (no DB): ``scripts/sat/az_ws_enqueue_create_query.sh`` — see ``SAT_WEBSERVICE_PIPELINE_FASTAPI.md``.
 """
 from __future__ import annotations
 
@@ -59,6 +62,25 @@ TERMINAL_STATES = {
     "SPLITTED",
 }
 OK_STATES = {"SENT", "DOWNLOADED", "PROCESSED", "TO_DOWNLOAD", "SPLITTED"}
+
+# Calendar presets for 2024–2025 WebService QA (small windows first → full matrix).
+DATE_PRESETS: dict[str, tuple[str, str]] = {
+    "q1-2024": ("2024-01-01", "2024-03-31"),
+    "q2-2024": ("2024-04-01", "2024-06-30"),
+    "q3-2024": ("2024-07-01", "2024-09-30"),
+    "q4-2024": ("2024-10-01", "2024-12-31"),
+    "q1-2025": ("2025-01-01", "2025-03-31"),
+    "q2-2025": ("2025-04-01", "2025-06-30"),
+    "q3-2025": ("2025-07-01", "2025-09-30"),
+    "q4-2025": ("2025-10-01", "2025-12-31"),
+    "h1-2024": ("2024-01-01", "2024-06-30"),
+    "h2-2024": ("2024-07-01", "2024-12-31"),
+    "h1-2025": ("2025-01-01", "2025-06-30"),
+    "h2-2025": ("2025-07-01", "2025-12-31"),
+    "year-2024": ("2024-01-01", "2024-12-31"),
+    "year-2025": ("2025-01-01", "2025-12-31"),
+    "2024-2025": ("2024-01-01", "2025-12-31"),
+}
 
 
 def _engine():
@@ -177,10 +199,22 @@ def verify_results(tenant_schema: str, expected: int, timeout: int = VERIFY_TIME
 
 
 def parse_args():
+    preset_keys = sorted(DATE_PRESETS.keys())
     p = argparse.ArgumentParser(description="Enqueue SAT create-query requests (CFDI + METADATA chunks).")
     p.add_argument(
         "--company-identifier",
         help="public.company.identifier (UUID). If omitted, prompts after listing companies.",
+    )
+    p.add_argument(
+        "--preset",
+        choices=preset_keys,
+        metavar="NAME",
+        help=f"Named calendar range (2024–2025 QA). Mutually exclusive with --start/--end. Keys: {', '.join(preset_keys)}.",
+    )
+    p.add_argument(
+        "--list-presets",
+        action="store_true",
+        help="Print preset date ranges and exit (no DB or queue access).",
     )
     p.add_argument("--start", help="Range start YYYY-MM-DD (non-interactive).")
     p.add_argument("--end", help="Range end YYYY-MM-DD (non-interactive).")
@@ -248,6 +282,14 @@ def resolve_company(args: argparse.Namespace) -> dict:
 
 
 def resolve_dates(args: argparse.Namespace) -> tuple[datetime, datetime]:
+    if args.preset:
+        if args.start or args.end:
+            print("Use either --preset or --start/--end, not both.")
+            sys.exit(1)
+        s_s, s_e = DATE_PRESETS[args.preset]
+        start = datetime.strptime(s_s, "%Y-%m-%d")
+        end = datetime.strptime(s_e, "%Y-%m-%d")
+        return start, end
     if args.start and args.end:
         try:
             start = datetime.strptime(args.start, "%Y-%m-%d")
@@ -263,7 +305,18 @@ def resolve_dates(args: argparse.Namespace) -> tuple[datetime, datetime]:
 
 def main() -> None:
     args = parse_args()
+    if args.list_presets:
+        print("Presets (calendar dates; CFDI chunks 60d, METADATA 180d; ISSUED+RECEIVED each):")
+        for name in sorted(DATE_PRESETS.keys()):
+            s_s, s_e = DATE_PRESETS[name]
+            print(f"  {name:14}  {s_s}  ->  {s_e}")
+        print("\nRecommended QA order: q1-2024 → quarter/half → year-2024 → 2024-2025.")
+        return
+
     print(f"Queue transport: {transport_kind()}  (override with SAT_SCRIPT_TRANSPORT=sqs|azure)")
+    if args.preset:
+        s_s, s_e = DATE_PRESETS[args.preset]
+        print(f"Date preset: {args.preset}  ({s_s} -> {s_e})")
 
     company = resolve_company(args)
     print(f"\nSelected: [{company['cid']}] {company['rfc']} ({company['identifier'][:12]}...)")
