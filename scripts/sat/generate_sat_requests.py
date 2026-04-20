@@ -12,7 +12,7 @@ Usage:
         --start 2024-01-01 --end 2024-03-31 --yes --cfdi-only
     # Azure from laptop: set ``CLOUD_PROVIDER=azure``, Service Bus send string, DB ``DATABASE_URL``/URI
     # aligned with the deployed API; optional ``SAT_SCRIPT_TRANSPORT=azure``.
-    # Single-message enqueue via Azure CLI: see ``SAT_DOWNLOAD_PIPELINE.md`` (section *Azure CLI — encolar WebService*).
+    # Single-message enqueue via Azure CLI: see ``SAT_WEBSERVICE_PIPELINE_FASTAPI.md`` (section *Azure CLI — encolar WebService*).
 """
 from __future__ import annotations
 

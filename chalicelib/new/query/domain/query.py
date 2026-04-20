@@ -32,6 +32,8 @@ class Query(SQSCompany):
     origin_sent_date: datetime | None = None
     wid: int | None = None
     cid: int | None = None
+    #: Count of SAT verify attempts after a pending (0–2) result; drives incremental re-queue delays.
+    ws_verify_retries: int = 0
 
     @property
     def is_mocked(self) -> bool:

@@ -2,6 +2,10 @@ import os
 from datetime import timedelta
 
 MAX_DELAY = timedelta(minutes=15)
+# Verify re-queue: allow up to 60m scheduled delay on Azure; SQS path still caps via ``MAX_DELAY`` in ``SQSHandler``.
+VERIFY_QUERY_MAX_DELAY = timedelta(
+    minutes=int(os.environ.get("VERIFY_QUERY_MAX_DELAY_MINUTES", 60))
+)
 MIN_DELAY = timedelta(seconds=1)
 KILOBYTE = 1024
 MAX_SQS_MESSAGE_SIZE = 256 * KILOBYTE

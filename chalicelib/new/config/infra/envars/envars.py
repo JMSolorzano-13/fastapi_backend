@@ -135,11 +135,15 @@ DB_NAME = os.environ["DB_NAME"]
 DB_USER = os.environ["DB_USER"]
 DB_PASSWORD = os.environ["DB_PASSWORD"]
 
-# SAT WS
-WS_MAX_WAITING_MINUTES = timedelta(minutes=int(os.environ.get("WS_MAX_WAITING_MINUTES", 60)))
+# SAT WS (align default with Azure Terraform: 240m window before TIME_LIMIT_REACHED / recreate)
+WS_MAX_WAITING_MINUTES = timedelta(minutes=int(os.environ.get("WS_MAX_WAITING_MINUTES", 240)))
 WS_MAX_WAITING_MINUTES_TO_RECREATE = timedelta(
     minutes=int(os.environ.get("WS_MAX_WAITING_MINUTES_TO_RECREATE", 60 * 5))
 )
+_ws_retry_raw = os.environ.get("WS_VERIFY_RETRY_INTERVALS_MINUTES", "5,15,30,60")
+WS_VERIFY_RETRY_INTERVALS_MINUTES: tuple[int, ...] = tuple(
+    int(x.strip()) for x in _ws_retry_raw.split(",") if x.strip()
+) or (5, 15, 30, 60)
 MAX_CFDI_PER_CHUNK = 6_950
 
 # Misc

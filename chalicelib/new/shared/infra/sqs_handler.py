@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from chalicelib.logger import DEBUG, ERROR, EXCEPTION, log
 from chalicelib.modules import Modules
 from chalicelib.new.config.infra import envars
+from chalicelib.new.shared.infra.queue_transport import send_queue_raw, transport_kind
 from chalicelib.new.shared.domain.primitives import identifier_default_factory
 from chalicelib.new.shared.infra.message import SQSMessage
 from chalicelib.new.shared.infra.message.sqs_delayed import SQSDelayed
@@ -33,9 +34,17 @@ class SQSHandler(BaseModel):
             "MessageDeduplicationId": identifier_default_factory(),
         }
 
+    def _effective_max_delay(self) -> timedelta:
+        """Azure verify queue: allow long ``scheduled_enqueue_time``; SQS/LocalStack caps at ``MAX_DELAY``."""
+        q = (self.queue_url or "").strip()
+        verify = (envars.SQS_VERIFY_QUERY or "").strip()
+        if q == verify and transport_kind() == "azure":
+            return envars.sqs.VERIFY_QUERY_MAX_DELAY
+        return self.max_delay
+
     def _get_delay_parameters(self, message: SQSMessage) -> dict:
         """Convert delay time to appropriate SQS parameter format."""
-        delay = message.get_delay(max_delay=self.max_delay)
+        delay = message.get_delay(max_delay=self._effective_max_delay())
         if delay is None:
             return {}
         log(
@@ -70,6 +79,18 @@ class SQSHandler(BaseModel):
 
             delay_parameters = self._get_delay_parameters(message)
             if delay_parameters and not isinstance(message, SQSDelayed):
+                q = (self.queue_url or "").strip()
+                verify = (envars.SQS_VERIFY_QUERY or "").strip()
+                if transport_kind() == "azure" and q == verify:
+                    ds = int(delay_parameters.get("DelaySeconds") or 0)
+                    cleared = message.model_copy(update={"execute_at": None})
+                    send_queue_raw(
+                        self.queue_url,
+                        cleared.model_dump_json(),
+                        delay_seconds=ds if ds > 0 else None,
+                        boto_sqs_client=self.sqs_client,
+                    )
+                    return
                 # Mensaje no `SQSDelayed`, envolverlo en SQSDelayed
                 execute_at = message.execute_at
                 message.execute_at = None
@@ -112,8 +133,6 @@ class SQSHandler(BaseModel):
                     **combined,
                 )
             else:
-                from chalicelib.new.shared.infra.queue_transport import send_queue_raw
-
                 ds = combined.get("DelaySeconds")
                 send_queue_raw(
                     queue_url,

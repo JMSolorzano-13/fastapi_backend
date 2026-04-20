@@ -10,6 +10,8 @@ Tenant: pass ``--company-identifier`` (``public.company.identifier``) or set
 
 Transport: SQS (boto3) vs Azure Service Bus — same rules as ``scripts/sat/_runtime.py``.
 
+**Postgres:** uses ``chalicelib.schema.connection_uri`` (``DB_*`` in ``.env``). If you get *Company not found* for a tenant that exists in **Azure**, your laptop is still pointing at **local** Postgres — set ``DB_HOST`` / ``DATABASE_URL`` to the cloud DB (e.g. tunnel to Azure Flexible Server, ``sslmode=require``) like ``_TEMP_DB/connect_dababase_azure.py``.
+
 Usage:
     cd fastapi_backend && poetry run python scripts/sat/manual_batch_reprocess.py
     poetry run python scripts/sat/manual_batch_reprocess.py --company-identifier <uuid> \\
@@ -77,13 +79,14 @@ class BatchReprocessor:
         }
 
     def _get_company_info(self) -> dict | None:
+        cid = self.tenant_id.strip().lower()
         with self.engine.connect() as conn:
             row = conn.execute(
                 text(
                     "SELECT id, identifier, workspace_id, rfc FROM public.company "
-                    "WHERE identifier = :cid"
+                    "WHERE lower(identifier::text) = :cid"
                 ),
-                {"cid": self.tenant_id},
+                {"cid": cid},
             ).fetchone()
             if not row:
                 return None
@@ -101,7 +104,8 @@ class BatchReprocessor:
                 text(
                     f"""
                 SELECT identifier, state, request_type, download_type,
-                       name, start, "end", is_manual, cfdis_qty, packages, created_at
+                       name, start, "end", is_manual, cfdis_qty, packages, created_at,
+                       sent_date, technology::text AS technology, origin_identifier
                 FROM sat_query
                 WHERE state IN ('SENT', 'DOWNLOADED')
                   AND created_at > NOW() - INTERVAL '{MAX_AGE_HOURS} hours'
@@ -128,6 +132,9 @@ class BatchReprocessor:
                         "cfdis_qty": r[8],
                         "packages": r[9] or [],
                         "created_at": r[10],
+                        "sent_date": r[11],
+                        "technology": r[12] or "WebService",
+                        "origin_identifier": str(r[13]) if r[13] is not None else None,
                     }
                 )
             return queries
@@ -154,6 +161,10 @@ class BatchReprocessor:
 
     def send_to_queue(self, query: dict, company: dict) -> str:
         queue_target = self._route_query(query)
+        sd = query.get("sent_date")
+        sd_iso = sd.isoformat() if sd else None
+        # ``QueryVerifierWS.do_check_pending`` uses ``sent_date`` / ``origin_sent_date``; omitting them breaks retries.
+        origin_sent = sd_iso
         message = {
             "company_identifier": self.tenant_id,
             "identifier": query["identifier"],
@@ -168,6 +179,11 @@ class BatchReprocessor:
             "cfdis_qty": query.get("cfdis_qty"),
             "wid": company["workspace_id"],
             "cid": company["id"],
+            "sent_date": sd_iso,
+            "origin_sent_date": origin_sent,
+            "technology": query.get("technology") or "WebService",
+            "origin_identifier": query.get("origin_identifier"),
+            "ws_verify_retries": 0,
         }
         send_queue_raw(queue_target, json.dumps(message, default=str))
         return queue_target.split("/")[-1] if "/" in queue_target else queue_target
@@ -195,7 +211,12 @@ class BatchReprocessor:
     def run(self) -> None:
         company = self._get_company_info()
         if not company:
-            print(f"[ERROR] Company not found: {self.tenant_id}")
+            print(f"[ERROR] Company not found in this database: {self.tenant_id!r}")
+            print(
+                f"  DB target: host={envars.DB_HOST!r} name={envars.DB_NAME!r} "
+                "(from fastapi_backend/.env). For Azure-only tenants, align DB_* with ACA / tunnel — "
+                "see script docstring and _TEMP_DB/connect_dababase_azure.py."
+            )
             return
 
         print("=" * 70)

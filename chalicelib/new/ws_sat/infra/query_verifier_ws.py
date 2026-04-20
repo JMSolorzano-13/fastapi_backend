@@ -1,6 +1,7 @@
 import concurrent.futures
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import timedelta
 from logging import DEBUG, ERROR, INFO, WARNING
 
 import requests
@@ -147,6 +148,11 @@ class QueryVerifierWS(WSRepo):
         ]
 
     def retry(self, query: Query) -> QueryActionResponse:
+        query.ws_verify_retries = int(getattr(query, "ws_verify_retries", 0) or 0) + 1
+        intervals = envars.WS_VERIFY_RETRY_INTERVALS_MINUTES
+        idx = min(query.ws_verify_retries - 1, len(intervals) - 1)
+        minutes = intervals[idx]
+        query.execute_at = utc_now() + timedelta(minutes=minutes)
         return [
             (
                 EventType.SAT_WS_QUERY_VERIFY_NEEDED,
