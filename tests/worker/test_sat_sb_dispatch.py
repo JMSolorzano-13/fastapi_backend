@@ -70,11 +70,11 @@ def test_dispatch_verify_routes_to_pipeline() -> None:
     body = '{"identifier":"00000000-0000-4000-8000-000000000002"}'
     with patch.object(sat_sb_dispatch.sat_pipe, "process_sqs_verify_query") as mock_pv, patch.object(
         sat_sb_dispatch, "sat_dispatch_registry",
-        return_value={"data-queue-verify-request": sat_sb_dispatch._runner_no_session(mock_pv)},
-    ):
+        return_value={"data-queue-verify-request": sat_sb_dispatch._runner_with_session("test", mock_pv)},
+    ), patch.object(sat_sb_dispatch, "new_session", _fake_new_session):
         sat_sb_dispatch.dispatch_sat_queue_message("data-queue-verify-request", body)
     mock_pv.assert_called_once()
-    (events_arg,) = mock_pv.call_args[0]
+    (events_arg, _session_arg) = mock_pv.call_args[0]
     assert list(events_arg)[0].body == body
 
 

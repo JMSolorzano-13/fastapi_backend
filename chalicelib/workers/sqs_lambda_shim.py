@@ -29,6 +29,7 @@ def sqs_handle_events(
     sqs_handler: SQSHandler | None = None,
     not_ready_function: Callable[[SQSMessage], None] | None = None,
     log_event_level=DEBUG,
+    strict_parse: bool = False,
 ) -> None:
     """Try to execute `function` for each SQS record (same semantics as legacy app.py)."""
     event_qty = 0
@@ -58,6 +59,8 @@ def sqs_handle_events(
                 "PARSING_FAILED",
                 context=context | {"exception": str(e)},
             )
+            if strict_parse:
+                raise
             continue
 
         if not message.is_ready():

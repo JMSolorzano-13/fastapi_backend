@@ -2,6 +2,7 @@
 
 import random
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
@@ -43,6 +44,7 @@ from chalicelib.new.query.infra.query_repository_sa import QueryRepositorySA
 from chalicelib.new.shared.domain.event.event_bus import EventBus
 from chalicelib.new.shared.domain.event.event_type import EventType
 from chalicelib.new.shared.infra.message.sqs_company import SQSCompanySendMetadata, SQSUpdaterQuery
+from chalicelib.workers.verify_query_payload import normalize_verify_query_body
 from chalicelib.new.shared.infra.sqs_handler import SQSHandler
 from chalicelib.new.utils.datetime import utc_now
 from chalicelib.new.ws_sat.domain.events import QueryNeedToBeSplittedEvent
@@ -171,7 +173,12 @@ def process_sqs_send_query_metadata_listener(events, session: Session) -> None:
     )
 
 
-def process_sqs_verify_query(events) -> None:
+def process_sqs_verify_query(events, session: Session) -> None:
+    """Hydrate verify payloads (``company_identifier``, ``sent_date``, …) then verify against SAT."""
+    normalized_events = []
+    for event in events:
+        body = normalize_verify_query_body(event.body, session)
+        normalized_events.append(SimpleNamespace(body=body))
     query_verifier = QueryVerifierWS(
         bus=get_global_bus(),
     )
@@ -181,10 +188,11 @@ def process_sqs_verify_query(events) -> None:
         queries.append(message)
 
     sqs_handle_events(
-        events=events,
+        events=normalized_events,
         message_type=Query,
         sqs_handler=SQSHandler(queue_url=envars.SQS_VERIFY_QUERY),
         function=_sqs_verify_query,
+        strict_parse=True,
     )
     query_verifier.parallel_verify(queries)
 
@@ -546,8 +554,8 @@ def get_sat_local_poll_dispatchers() -> dict[str, tuple]:
     def _send_meta(event_dict, session):
         process_sqs_send_query_metadata_listener(dict_to_sqs_event_records(event_dict), session)
 
-    def _verify(event_dict, _context):
-        process_sqs_verify_query(dict_to_sqs_event_records(event_dict))
+    def _verify(event_dict, session):
+        process_sqs_verify_query(dict_to_sqs_event_records(event_dict), session)
 
     def _download(event_dict, _context):
         process_sqs_download_query(dict_to_sqs_event_records(event_dict))
@@ -579,7 +587,10 @@ def get_sat_local_poll_dispatchers() -> dict[str, tuple]:
             _wrap_with_session("sqs_send_query_metadata_listener", False, _send_meta),
             "Send Metadata",
         ),
-        envars.SQS_VERIFY_QUERY: (_verify, "Verify"),
+        envars.SQS_VERIFY_QUERY: (
+            _wrap_with_session("sqs_verify_query", False, _verify),
+            "Verify",
+        ),
         envars.SQS_DOWNLOAD_QUERY: (_download, "Download"),
         envars.SQS_UPDATER_QUERY: (
             _wrap_with_session("sqs_updater_query", False, _updater),

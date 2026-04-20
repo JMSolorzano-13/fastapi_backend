@@ -52,7 +52,7 @@ def _sat_dispatch_specs() -> list[tuple[str, str, Callable[..., None], bool]]:
             sat_pipe.process_sqs_send_query_metadata_listener,
             True,
         ),
-        ("SQS_VERIFY_QUERY", "service_bus_verify_query", sat_pipe.process_sqs_verify_query, False),
+        ("SQS_VERIFY_QUERY", "service_bus_verify_query", sat_pipe.process_sqs_verify_query, True),
         (
             "SQS_DOWNLOAD_QUERY",
             "service_bus_download_query",
