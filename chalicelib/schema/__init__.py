@@ -1,6 +1,7 @@
 import logging
 import os
 import warnings
+from urllib.parse import quote_plus
 
 from click import echo
 from sqlalchemy import MetaData, create_engine
@@ -25,9 +26,20 @@ DATABASE_RO = {
     "PASSWORD": envars.DB_PASSWORD,
 }
 
-connection_uri = "postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}".format(**DATABASE)
+# Percent-encode user/password so ``+``, ``@``, ``/``, etc. in passwords are not mangled (``+`` → space).
+connection_uri = "postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}".format(
+    USER=quote_plus(str(DATABASE["USER"])),
+    PASSWORD=quote_plus(str(DATABASE["PASSWORD"])),
+    HOST=DATABASE["HOST"],
+    PORT=DATABASE["PORT"],
+    NAME=DATABASE["NAME"],
+)
 connection_uri_ro = "postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}".format(
-    **DATABASE_RO
+    USER=quote_plus(str(DATABASE_RO["USER"])),
+    PASSWORD=quote_plus(str(DATABASE_RO["PASSWORD"])),
+    HOST=DATABASE_RO["HOST"],
+    PORT=DATABASE_RO["PORT"],
+    NAME=DATABASE_RO["NAME"],
 )
 
 common_engine_connection_args = {
@@ -77,4 +89,10 @@ def create_connection_uri(persists_tests: bool, persist_database: bool) -> str:
     db_config = DATABASE.copy()
     if not persists_tests:
         db_config["NAME"] += "_test"
-    return "postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}".format(**db_config)
+    return "postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}".format(
+        USER=quote_plus(str(db_config["USER"])),
+        PASSWORD=quote_plus(str(db_config["PASSWORD"])),
+        HOST=db_config["HOST"],
+        PORT=db_config["PORT"],
+        NAME=db_config["NAME"],
+    )

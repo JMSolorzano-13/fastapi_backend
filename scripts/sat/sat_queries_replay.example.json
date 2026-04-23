@@ -1,0 +1,21 @@
+{
+  "queries": [
+    {
+      "created_at": "2026-04-23T00:05:44.482471",
+      "updated_at": "2026-04-23T00:25:46.291533",
+      "identifier": "942bade0-e421-4c79-bf65-819f2e8c8aae",
+      "name": "c91bca66-7fa4-44f1-96fb-cc1186b66018",
+      "start": "2020-12-31 23:59:59.243000",
+      "end": "2026-04-22 18:05:42.173689",
+      "download_type": "ISSUED",
+      "request_type": "METADATA",
+      "packages": ["C91BCA66-7FA4-44F1-96FB-CC1186B66018_01"],
+      "cfdis_qty": 12635,
+      "state": "DOWNLOADED",
+      "sent_date": "2026-04-23 00:05:43.435135",
+      "is_manual": false,
+      "technology": "WebService",
+      "origin_identifier": null
+    }
+  ]
+}

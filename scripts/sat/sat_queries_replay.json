@@ -1,0 +1,80 @@
+{
+  "queries": [
+    {
+      "created_at": "2026-04-23T00:05:44.482471",
+      "updated_at": "2026-04-23T00:25:46.291533",
+      "identifier": "942bade0-e421-4c79-bf65-819f2e8c8aae",
+      "name": "c91bca66-7fa4-44f1-96fb-cc1186b66018",
+      "start": "2020-12-31 23:59:59.243000",
+      "end": "2026-04-22 18:05:42.173689",
+      "download_type": "ISSUED",
+      "request_type": "METADATA",
+      "packages": [
+        "C91BCA66-7FA4-44F1-96FB-CC1186B66018_01"
+      ],
+      "cfdis_qty": 12635,
+      "state": "DOWNLOADED",
+      "sent_date": "2026-04-23 00:05:43.435135",
+      "is_manual": false,
+      "technology": "WebService",
+      "origin_identifier": null
+    },
+    {
+      "created_at": "2026-04-23 00:06:32.558835",
+      "updated_at": "2026-04-23 00:26:17.312736",
+      "identifier": "a240a4fa-3d55-4c16-bc73-b4a88d940780",
+      "name": "82b57910-2f35-4f68-bfc5-7182fb3073ec",
+      "start": "2020-12-31 23:59:59.491000",
+      "end": "2021-01-21 00:00:00.165000",
+      "download_type": "ISSUED",
+      "request_type": "CFDI",
+      "packages": [
+        "82B57910-2F35-4F68-BFC5-7182FB3073EC_01"
+      ],
+      "cfdis_qty": 65,
+      "state": "DOWNLOADED",
+      "sent_date": "2026-04-23 00:06:31.505224",
+      "is_manual": false,
+      "technology": "WebService",
+      "origin_identifier": null
+    },
+    {
+      "created_at": "2026-04-23 00:06:32.558844",
+      "updated_at": "2026-04-23 00:27:08.407322",
+      "identifier": "7cfa6300-7ec3-4803-a595-da6378612ac8",
+      "name": "6cb67ac8-26f8-4be0-8c5d-f0953718195f",
+      "start": "2021-01-20 23:59:59.930000",
+      "end": "2021-02-10 00:00:00.576000",
+      "download_type": "ISSUED",
+      "request_type": "CFDI",
+      "packages": [
+        "6CB67AC8-26F8-4BE0-8C5D-F0953718195F_01"
+      ],
+      "cfdis_qty": 113,
+      "state": "DOWNLOADED",
+      "sent_date": "2026-04-23 00:06:32.578675",
+      "is_manual": false,
+      "technology": "WebService",
+      "origin_identifier": null
+    },
+    {
+      "created_at": "2026-04-23 00:09:37.956193",
+      "updated_at": "2026-04-23 01:21:11.245626",
+      "identifier": "5d1b5f54-d204-4e12-835c-b66566c1f9bb",
+      "name": "c97e124e-35ae-4fda-88b2-94cd6d6b6ad8",
+      "start": "2021-03-01 23:59:59.857000",
+      "end": "2021-03-22 00:00:00.471000",
+      "download_type": "RECEIVED",
+      "request_type": "CFDI",
+      "packages": [
+        "C97E124E-35AE-4FDA-88B2-94CD6D6B6AD8_01"
+      ],
+      "cfdis_qty": 3,
+      "state": "DOWNLOADED",
+      "sent_date": "2026-04-23 00:09:40.075912",
+      "is_manual": false,
+      "technology": "WebService",
+      "origin_identifier": null
+    }
+  ]
+}

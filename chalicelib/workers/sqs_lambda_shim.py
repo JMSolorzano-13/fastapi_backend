@@ -1,5 +1,6 @@
 """SQS message dispatch without Chalice — shared by Chalice app and local pollers."""
 
+import os
 from collections.abc import Callable, Iterable
 from types import SimpleNamespace
 from typing import Any, Protocol
@@ -104,6 +105,12 @@ def sqs_handle_events(
                 "PROCESS_FAILED",
                 context=context | {"exception": str(e)},
             )
+            if os.environ.get("FASTAPI_SB_WORKER_STRICT_ERRORS", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            ):
+                raise
             continue
     log(
         Modules.SQS_HANDLER,

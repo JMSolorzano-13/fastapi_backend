@@ -39,7 +39,7 @@ from scripts.sat._runtime import (
     transport_kind,
 )
 
-configure_path_and_env()
+configure_path_and_env(operator_script=True)
 
 from chalicelib.new.config.infra import envars
 from chalicelib.schema import connection_uri

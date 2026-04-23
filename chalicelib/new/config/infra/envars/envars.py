@@ -102,10 +102,21 @@ AUTH_BACKEND = _AUTH_BACKEND_RAW
 if LOCAL_INFRA:
     AUTH_BACKEND = "local_jwt"
 
-if AUTH_BACKEND == "local_jwt" and not LOCAL_INFRA and not os.environ.get("JWT_SECRET", "").strip():
+_sat_script_skip_jwt = os.environ.get("SAT_SCRIPT_SKIP_JWT_ENVAR", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+if (
+    AUTH_BACKEND == "local_jwt"
+    and not LOCAL_INFRA
+    and not os.environ.get("JWT_SECRET", "").strip()
+    and not _sat_script_skip_jwt
+):
     raise ValueError(
         "AUTH_BACKEND=local_jwt requires JWT_SECRET when LOCAL_INFRA=0 "
-        "(configure in Azure Key Vault / ACA secrets)"
+        "(configure in Azure Key Vault / ACA secrets). "
+        "SAT operator CLIs set SAT_SCRIPT_SKIP_JWT_ENVAR=1 via configure_path_and_env(operator_script=True)."
     )
 
 # Cognito

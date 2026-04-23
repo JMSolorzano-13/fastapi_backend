@@ -10,7 +10,17 @@ Tenant: pass ``--company-identifier`` (``public.company.identifier``) or set
 
 Transport: SQS (boto3) vs Azure Service Bus — same rules as ``scripts/sat/_runtime.py``.
 
-**Postgres:** uses ``chalicelib.schema.connection_uri`` (``DB_*`` in ``.env``). If you get *Company not found* for a tenant that exists in **Azure**, your laptop is still pointing at **local** Postgres — set ``DB_HOST`` / ``DATABASE_URL`` to the cloud DB (e.g. tunnel to Azure Flexible Server, ``sslmode=require``) like ``_TEMP_DB/connect_dababase_azure.py``.
+**Postgres:** uses ``chalicelib.schema.connection_uri`` (``DB_HOST``, ``DB_PORT``, ``DB_NAME``, ``DB_USER``, ``DB_PASSWORD`` from the environment after ``load_dotenv``). ``Company not found`` almost always means **this process is not connected to the same DB as Azure** (e.g. ``.env`` has ``DB_HOST=localhost`` for a local Postgres without that ``public.company`` row).
+
+**Auth / JWT:** este script usa ``configure_path_and_env(operator_script=True)``; no hace falta ``JWT_SECRET`` en laptop aunque ``LOCAL_INFRA=0`` y ``AUTH_BACKEND=local_jwt`` en ``.env``.
+
+**Azure desde laptop (túnel SSH):** levanta el túnel (ej. ``-L 5433:<azure_fqdn>:5432``) y **sobrescribe** ``DB_*`` en la misma línea del comando (las variables ya definidas en el shell tienen prioridad sobre ``.env`` con ``python-dotenv`` por defecto):
+
+    cd fastapi_backend
+    DB_HOST=127.0.0.1 DB_PORT=5433 DB_NAME=ezaudita_db DB_USER=solcpuser \\
+      PGSSLMODE=require DB_PASSWORD='<misma que ACA/Key Vault; caracteres como + se codifican en URI vía chalicelib.schema>' \\
+      LOCAL_INFRA=0 CLOUD_PROVIDER=azure \\
+      poetry run python scripts/sat/manual_batch_reprocess.py --company-identifier '<tenant_uuid>'
 
 Usage:
     cd fastapi_backend && poetry run python scripts/sat/manual_batch_reprocess.py
@@ -34,7 +44,7 @@ from sqlalchemy import create_engine, text
 
 from scripts.sat._runtime import configure_path_and_env, send_queue_raw, transport_kind
 
-configure_path_and_env()
+configure_path_and_env(operator_script=True)
 
 from chalicelib.new.config.infra import envars
 from chalicelib.schema import connection_uri
@@ -168,6 +178,8 @@ class BatchReprocessor:
         message = {
             "company_identifier": self.tenant_id,
             "identifier": query["identifier"],
+            # Go/Python handlers expect ``query_identifier`` (sat_query PK); omitting breaks verify/PROCESSED updates.
+            "query_identifier": query["identifier"],
             "download_type": query["download_type"],
             "request_type": query["request_type"],
             "state": query["state"],
@@ -213,9 +225,14 @@ class BatchReprocessor:
         if not company:
             print(f"[ERROR] Company not found in this database: {self.tenant_id!r}")
             print(
-                f"  DB target: host={envars.DB_HOST!r} name={envars.DB_NAME!r} "
-                "(from fastapi_backend/.env). For Azure-only tenants, align DB_* with ACA / tunnel — "
-                "see script docstring and _TEMP_DB/connect_dababase_azure.py."
+                f"  DB target: host={envars.DB_HOST!r} port={envars.DB_PORT!r} "
+                f"name={envars.DB_NAME!r} user={envars.DB_USER!r}"
+            )
+            print(
+                "  Si la empresa está en Azure: este host/puerto no es el Flexible Server "
+                "(o no es el túnel). Ej. con SSH -L 5433:…postgres.database.azure.com:5432 use "
+                "DB_HOST=127.0.0.1 DB_PORT=5433 PGSSLMODE=require y DB_PASSWORD alineado con Azure "
+                "(Key Vault: _TEMP_DB/connect_dababase_azure.py). Ver docstring de este script."
             )
             return
 
